@@ -5,9 +5,10 @@ import { Match, WEAPON_BY_ID } from './sim.js';
 import { Renderer } from './renderer.js';
 import { Sound } from './sound.js';
 import { UI } from './ui.js';
-import { Net } from './net.js';
+import { makeNet } from './net.js';
 import { aiDecideTurn, aiShop, aiMaybeTaunt } from './ai.js';
 import { Editor } from './editor.js';
+import { FxLab } from './fxlab.js';
 import { clamp } from './utils.js';
 
 // Infinity-safe ammo (de)serialization for campaign saves
@@ -28,7 +29,7 @@ class App {
     this.renderer = new Renderer(this.canvas);
     this.sound = new Sound();
     this.ui = new UI(this);
-    this.net = new Net();
+    this.net = makeNet();
     this.match = null;        // the real game
     this.demo = null;         // menu background battle
     this.state = 'menu';
@@ -49,8 +50,15 @@ class App {
 
     this.bindInput();
     this.bindNet();
-    this.startDemo();
-    this.ui.showMenu();
+    this.timeScale = 1;
+    this.fxlab = new FxLab(this);
+    if (location.search.includes('fxlab')) {
+      this.sound.init();
+      this.fxlab.start();
+    } else {
+      this.startDemo();
+      this.ui.showMenu();
+    }
     this._rafT = performance.now();
     this._raf = (t) => { this._rafT = t; this.loop(t); requestAnimationFrame(this._raf); };
     requestAnimationFrame(this._raf);
@@ -77,8 +85,9 @@ class App {
 
   // ---------- main loop ----------
   loop(t, hidden = false) {
-    const dt = Math.min((t - this.lastT) / 1000 || 0.016, hidden ? 0.3 : 0.1);
+    let dt = Math.min((t - this.lastT) / 1000 || 0.016, hidden ? 0.3 : 0.1);
     this.lastT = t;
+    if (this.timeScale && this.timeScale !== 1) dt *= this.timeScale;
     if (this.editor.open) {
       if (!hidden) this.editor.tick(dt);
       return;

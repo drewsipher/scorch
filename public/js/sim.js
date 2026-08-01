@@ -345,6 +345,7 @@ export class Match {
     for (const p of this.projectiles) {
       p.age += dt;
       let dead = false;
+      if (p.kind === 'chunk' && p.age > 5) { continue; }
       if (p.kind === 'roller' && p.rolling) {
         dead = this.stepRoller(p, dt);
       } else if (p.kind === 'digger' && p.digging) {
@@ -428,6 +429,17 @@ export class Match {
   }
 
   impact(p, hitTank) {
+    if (p.kind === 'chunk') {
+      // debris: sting tanks, splat a little loose sand where it lands
+      if (hitTank) {
+        this.damageTank(hitTank, p.chunkDmg, this.tanks[p.owner] ?? null);
+        this.emit({ type: 'chunkHit', x: p.x, y: p.y, tank: hitTank.index });
+      } else {
+        this.terrain.addDirt(p.x | 0, p.y | 0, Math.max(2, p.chunkSz | 0));
+        this.emit({ type: 'chunkLand', x: p.x, y: p.y });
+      }
+      return true;
+    }
     const def = WEAPON_BY_ID[p.weapon];
     switch (p.kind) {
       case 'roller': {
@@ -634,6 +646,25 @@ export class Match {
     this.terrain.sandify(x | 0, y | 0, (radius * 1.45) | 0);
     // crater lips and overhangs collapse too
     this.terrain.looseOverhangs(x | 0, y | 0, (radius * 1.9) | 0);
+    // heavy blasts hurl physical debris that arcs, splats, and stings on impact
+    if (this.projectiles.length < 60 && radius >= 20) {
+      const rng = makeRng((this.roundSeed ^ Math.imul((x | 0) + 7, 2654435761) ^ Math.imul((y | 0) + 13, 40503)) >>> 0);
+      const n = clamp(Math.round(radius / 9), 4, 14);
+      for (let i = 0; i < n; i++) {
+        const ang = -Math.PI / 2 + rng.range(-1.15, 1.15);
+        const sp = radius * rng.range(2.6, 6.2);
+        this.spawnProjectile({
+          weapon: 'baby_missile',   // def lookup fallback; kind drives behavior
+          kind: 'chunk', owner: ownerIdx,
+          x: x + rng.range(-radius * 0.3, radius * 0.3),
+          y: y - rng.range(0, radius * 0.3),
+          vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp,
+          chunkDmg: rng.range(2.5, 6),
+          chunkSz: rng.range(2, 4.5),
+          trailColor: null,
+        });
+      }
+    }
     this.tanksFall();
     this.emit({ type: 'explosion', x, y, r: radius, weapon: def ? def.id : null, nuke: !!(def && def.nukeFlash) });
   }
@@ -661,7 +692,7 @@ export class Match {
     }
   }
 
-  killTank(t, attacker) {
+  killTank(t, attacker, forceType) {
     if (!t.alive) return;
     t.alive = false;
     t.hp = 0;
@@ -669,8 +700,9 @@ export class Match {
     // pick a death, Scorched Earth style: from a sad little pffrt to armageddon
     const rng = makeRng((this.roundSeed ^ (t.index * 40503) ^ Math.imul(this.turnCount + 1, 2654435761)) >>> 0);
     const roll = rng();
-    let dtype;
-    if (roll < 0.14) dtype = 'dud';
+    let dtype = forceType;
+    if (dtype) { /* forced (FX lab) */ }
+    else if (roll < 0.14) dtype = 'dud';
     else if (roll < 0.34) dtype = 'pop';
     else if (roll < 0.56) dtype = 'boom';
     else if (roll < 0.70) dtype = 'cascade';

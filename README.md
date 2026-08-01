@@ -5,8 +5,8 @@ artillery on fully destructible procedural terrain, with the complete economy /
 armory / upgrade loop, AI personalities, and local or online multiplayer.
 
 **▶ [Play it now — drewsipher.github.io/scorch](https://drewsipher.github.io/scorch/)**
-*(the static site covers Campaign, Local Battle & Sandbox; online multiplayer
-needs the tiny Node server below)*
+*(everything works on the static site — online multiplayer runs peer-to-peer
+over WebRTC, no server needed)*
 
 ![genre](https://img.shields.io/badge/genre-artillery-orange) ![deps](https://img.shields.io/badge/runtime%20deps-1%20(ws)-green)
 
@@ -28,9 +28,11 @@ npm start          # → http://localhost:8080
   enemies, choose each enemy's AI and hand-pick its exact arsenal, then name,
   save, and play your maps. Post-battle you can replay or jump straight back
   into the editor.
-- **Host Online Game** — share the 4-letter room code; friends join from their
-  browser at your address. Late peers are auto-assigned tanks. If someone
-  disconnects, an AI takes over their tank.
+- **Host Online Game** — share the 4-letter room code; friends join from
+  their browser. On the GitHub Pages site this runs **peer-to-peer over
+  WebRTC** (free public PeerJS broker — no server at all); when self-hosted
+  with `npm start` it uses the built-in WebSocket relay. Late peers are
+  auto-assigned tanks; if someone disconnects, an AI takes over.
 
 ## Controls
 
@@ -82,6 +84,12 @@ npm start          # → http://localhost:8080
 - **All audio synthesized live** with Web Audio — zero asset files. Upbeat
   chiptune march (drums, walking bass, swing lead) plus full SFX.
 
+## FX Lab
+
+Open `/?fxlab` (works on the live site too) for a test range with every weapon
+impact and all seven death sequences on buttons, plus 0.15×/0.4× slow-motion —
+used for iterating on explosion feel.
+
 ## Architecture
 
 ```
@@ -118,6 +126,7 @@ node test/action.js    # screenshot gallery of weapon FX
 node test/deaths.js    # death sequences, sand physics, options UI
 node test/campaign.js  # campaign flow, saves, foe arsenal escalation
 node test/sandbox.js   # map editor, terrain painting, custom spawns/loadouts
+node test/fxlab-p2p.js # FX lab + peer-to-peer lockstep over the PeerJS broker
 node test/ui-check.js  # weapon rack, shop icons, music engine
 ```
 

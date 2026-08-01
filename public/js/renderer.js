@@ -223,6 +223,21 @@ export class Renderer {
           }
           break;
         }
+        case 'chunkLand': {
+          for (let i = 0; i < 4; i++) {
+            this.particles.push({
+              kind: 'puff', x: e.x + (Math.random() - 0.5) * 6, y: e.y - 3,
+              vx: (Math.random() - 0.5) * 26, vy: -12 - Math.random() * 18,
+              life: 0.7, t: 0, sz: 2 + Math.random() * 1.6,
+              col: '150,135,115',
+            });
+          }
+          break;
+        }
+        case 'chunkHit': {
+          this.fxSpark(e.x, e.y, 6, '#ffd24d');
+          break;
+        }
         case 'cookoffPop': {
           this.particles.push({ kind: 'flash', x: e.x, y: e.y - 14, r: 14, life: 0.1, t: 0 });
           this.shakeIt(2);
@@ -241,7 +256,8 @@ export class Renderer {
     const tint = (def && def.trail) || '#ffd9a0';
     const dusty = weaponId && DUSTY_WEAPONS.has(weaponId);
     const funky = weaponId === 'funky_bomb';
-    this.shakeIt(clamp(r * 0.16, 3, 22));
+    this.shakeIt(clamp(r * 0.2, 4, 30));
+    this.punch = Math.min((this.punch || 0) + clamp(r * 0.0006, 0.01, 0.05), 0.08);
     if (nuke) this.flash = Math.min(1, this.flash + 0.9);
 
     // flashing area-of-effect circle at the exact blast radius (very SE)
@@ -374,7 +390,7 @@ export class Renderer {
       this.shakeT += dt * 34;
       sx = Math.sin(this.shakeT * 1.9) * this.shake * this.dpr;
       sy = Math.cos(this.shakeT * 2.3) * this.shake * this.dpr;
-      this.shake *= Math.pow(0.02, dt);
+      this.shake *= Math.pow(0.045, dt);
     }
 
     // sky
@@ -385,7 +401,8 @@ export class Renderer {
     if (!match || !this.theme) return;
 
     const cam = this.cam;
-    const z = cam.zoom;
+    this.punch = (this.punch || 0) * Math.pow(0.002, dt);
+    const z = cam.zoom * (1 + this.punch);
     const ox = this.vw / 2 - cam.x * z + sx;
     const oy = this.vh / 2 - cam.y * z + sy;
     const w2s = (x, y) => [x * z + ox, y * z + oy];
@@ -768,6 +785,20 @@ export class Renderer {
     const liveIds = new Set();
     for (const p of match.projectiles) {
       liveIds.add(p.id);
+      if (p.kind === 'chunk') {
+        // tumbling debris chunk
+        const [cx, cy] = w2s(p.x, p.y);
+        const sz = Math.max(2, p.chunkSz * 2.2 * z);
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate(p.age * 7);
+        ctx.fillStyle = this.theme ? this.theme.terrainTop : '#8a7458';
+        ctx.fillRect(-sz / 2, -sz / 2, sz, sz);
+        ctx.fillStyle = 'rgba(0,0,0,0.35)';
+        ctx.fillRect(-sz / 2, 0, sz, sz / 2);
+        ctx.restore();
+        continue;
+      }
       // smoke-puff trail (Metal Slug rockets billow little puffs)
       const last = this.puffTimers.get(p.id) ?? -1;
       if (this.time - last > 0.045 && !p.rolling && !p.digging) {
