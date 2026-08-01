@@ -60,35 +60,144 @@ export class Sound {
   }
 
   // ---- SFX ----
-  fire(power = 50) {
-    if (!this.ctx || !this.enabled) return;
-    const t = this.ctx.currentTime;
-    // deep thump
+  thump(t, f0, f1, vol, dur = 0.22) {
     const o = this.ctx.createOscillator();
     o.type = 'sine';
-    o.frequency.setValueAtTime(130, t);
-    o.frequency.exponentialRampToValueAtTime(38, t + 0.18);
+    o.frequency.setValueAtTime(f0, t);
+    o.frequency.exponentialRampToValueAtTime(f1, t + dur * 0.8);
     const g = this.ctx.createGain();
-    this.env(g, t, 0.7, 0.005, 0.22);
+    this.env(g, t, vol, 0.005, dur);
     o.connect(g); g.connect(this.sfx);
-    o.start(t); o.stop(t + 0.3);
-    // launch whoosh
+    o.start(t); o.stop(t + dur + 0.08);
+  }
+
+  whoosh(t, f0, f1, vol, dur = 0.3, q = 1.2) {
     const n = this.ctx.createBufferSource();
     n.buffer = this.noiseBuffer();
     const f = this.ctx.createBiquadFilter();
     f.type = 'bandpass';
-    f.frequency.setValueAtTime(900, t);
-    f.frequency.exponentialRampToValueAtTime(2400 + power * 12, t + 0.25);
-    f.Q.value = 1.2;
+    f.frequency.setValueAtTime(f0, t);
+    f.frequency.exponentialRampToValueAtTime(f1, t + dur * 0.85);
+    f.Q.value = q;
     const ng = this.ctx.createGain();
-    this.env(ng, t, 0.25, 0.02, 0.3);
+    this.env(ng, t, vol, 0.02, dur);
     n.connect(f); f.connect(ng); ng.connect(this.sfx);
-    n.start(t); n.stop(t + 0.4);
+    n.start(t); n.stop(t + dur + 0.1);
   }
 
-  explosion(size = 1, nuke = false) {
+  // every weapon family launches with its own voice
+  fire(weapon = 'missile', power = 50) {
     if (!this.ctx || !this.enabled) return;
     const t = this.ctx.currentTime;
+    switch (weapon) {
+      case 'baby_missile':
+        this.thump(t, 240, 70, 0.4, 0.14);
+        this.whoosh(t, 1300, 2600 + power * 10, 0.16, 0.22);
+        break;
+      case 'baby_nuke': case 'nuke': case 'deaths_head': {
+        // ominous heavy launch with a low horn
+        this.thump(t, 85, 30, 0.85, 0.35);
+        this.whoosh(t, 500, 1400, 0.3, 0.5, 0.8);
+        const o = this.ctx.createOscillator();
+        o.type = 'sawtooth';
+        o.frequency.setValueAtTime(55, t);
+        o.frequency.linearRampToValueAtTime(48, t + 0.6);
+        const f = this.ctx.createBiquadFilter();
+        f.type = 'lowpass'; f.frequency.value = 240;
+        const g = this.ctx.createGain();
+        this.env(g, t, 0.22, 0.05, 0.65, 'lin');
+        o.connect(f); f.connect(g); g.connect(this.sfx);
+        o.start(t); o.stop(t + 0.8);
+        break;
+      }
+      case 'mirv':
+        // double kick — one bird, many warheads
+        this.thump(t, 150, 45, 0.55, 0.18);
+        this.thump(t + 0.09, 200, 60, 0.4, 0.14);
+        this.whoosh(t, 900, 2600, 0.22, 0.3);
+        break;
+      case 'homing_missile': {
+        this.thump(t, 160, 50, 0.5, 0.18);
+        // electronic lock-on chirp
+        const o = this.ctx.createOscillator();
+        o.type = 'square';
+        o.frequency.setValueAtTime(900, t + 0.05);
+        o.frequency.exponentialRampToValueAtTime(2400, t + 0.35);
+        const g = this.ctx.createGain();
+        this.env(g, t + 0.05, 0.06, 0.01, 0.32);
+        o.connect(g); g.connect(this.sfx);
+        o.start(t + 0.05); o.stop(t + 0.45);
+        break;
+      }
+      case 'roller': case 'heavy_roller':
+        // mortar clunk, no scream
+        this.thump(t, 95, 40, weapon === 'roller' ? 0.55 : 0.75, 0.3);
+        this.whoosh(t, 300, 700, 0.12, 0.25, 0.7);
+        break;
+      case 'dirt_clod': case 'ton_of_dirt': case 'digger': case 'sandhog':
+        // fat muffled thoomp
+        this.thump(t, 70, 34, 0.7, 0.32);
+        this.whoosh(t, 220, 420, 0.14, 0.3, 0.6);
+        break;
+      case 'napalm': case 'hot_napalm':
+        // sloshing heavy whoosh
+        this.thump(t, 110, 40, 0.5, 0.22);
+        this.whoosh(t, 420, 1100, 0.32, 0.5, 0.5);
+        break;
+      case 'funky_bomb': {
+        this.thump(t, 140, 50, 0.45, 0.18);
+        // party spring
+        const o = this.ctx.createOscillator();
+        o.type = 'square';
+        o.frequency.setValueAtTime(300, t);
+        o.frequency.exponentialRampToValueAtTime(900, t + 0.22);
+        const g = this.ctx.createGain();
+        this.env(g, t, 0.08, 0.01, 0.24);
+        o.connect(g); g.connect(this.sfx);
+        o.start(t); o.stop(t + 0.3);
+        break;
+      }
+      case 'leapfrog': {
+        this.thump(t, 130, 45, 0.5, 0.2);
+        const o = this.ctx.createOscillator();
+        o.type = 'sine';
+        o.frequency.setValueAtTime(220, t);
+        o.frequency.exponentialRampToValueAtTime(520, t + 0.18);
+        const g = this.ctx.createGain();
+        this.env(g, t, 0.12, 0.01, 0.2);
+        o.connect(g); g.connect(this.sfx);
+        o.start(t); o.stop(t + 0.26);
+        break;
+      }
+      default:
+        this.thump(t, 130, 38, 0.7, 0.22);
+        this.whoosh(t, 900, 2400 + power * 12, 0.25, 0.3);
+    }
+  }
+
+  explosion(size = 1, nuke = false, flavor = null) {
+    if (!this.ctx || !this.enabled) return;
+    const t = this.ctx.currentTime;
+    if (flavor === 'dust') {
+      // muffled earthen thud — no fire crack
+      this.thump(t, 75, 26, 0.7 * Math.min(size, 1.3), 0.5);
+      const n = this.ctx.createBufferSource();
+      n.buffer = this.noiseBuffer();
+      n.loop = true;
+      const f = this.ctx.createBiquadFilter();
+      f.type = 'lowpass';
+      f.frequency.setValueAtTime(500, t);
+      f.frequency.exponentialRampToValueAtTime(80, t + 0.6);
+      const ng = this.ctx.createGain();
+      this.env(ng, t, 0.4 * Math.min(size, 1.3), 0.01, 0.6);
+      n.connect(f); f.connect(ng); ng.connect(this.sfx);
+      n.start(t); n.stop(t + 0.7);
+      return;
+    }
+    if (flavor === 'funky') {
+      // boom plus a strobing little arpeggio
+      [660, 880, 1108, 1320].forEach((fq, i) => this.blip(fq, 0.1, 'square', 0.1, fq * 1.4, t + 0.1 + i * 0.07));
+    }
     const dur = 0.5 + size * 0.5 + (nuke ? 0.8 : 0);
     // low boom
     const o = this.ctx.createOscillator();
@@ -203,9 +312,9 @@ export class Sound {
   dirt() { this.blip(90, 0.25, 'sine', 0.3, 40); }
   parachute() { this.blip(300, 0.2, 'sine', 0.15, 420); }
 
-  blip(f0, dur, type, vol, f1) {
+  blip(f0, dur, type, vol, f1, at = null) {
     if (!this.ctx || !this.enabled) return;
-    const t = this.ctx.currentTime;
+    const t = at ?? this.ctx.currentTime;
     const o = this.ctx.createOscillator();
     o.type = type;
     o.frequency.setValueAtTime(f0, t);
@@ -428,8 +537,13 @@ export class Sound {
     if (!this.ctx || !this.enabled) return;
     for (const e of events) {
       switch (e.type) {
-        case 'fire': this.fire(e.power); break;
-        case 'explosion': this.explosion(Math.min(e.r / 50, 2.2), e.nuke); break;
+        case 'fire': this.fire(e.weapon, e.power); break;
+        case 'explosion': {
+          const dustyW = ['dirt_clod', 'ton_of_dirt', 'digger', 'sandhog'];
+          const flavor = dustyW.includes(e.weapon) ? 'dust' : e.weapon === 'funky_bomb' ? 'funky' : null;
+          this.explosion(Math.min(e.r / 50, 2.2), e.nuke, flavor);
+          break;
+        }
         case 'shieldHit': this.zap(); break;
         case 'shieldDown': this.shieldDown(); break;
         case 'battery': this.battery(); break;
@@ -445,10 +559,12 @@ export class Sound {
         case 'roundEnd': case 'gameEnd': this.fanfare(); this.napalmLoop(false); this.whistleStop(); break;
       }
     }
-    // whistle tracking: any fast-falling projectile?
+    // whistle tracking: only true shells scream — never dirt, drills,
+    // canisters, rollers, or flying debris
+    const WHISTLERS = new Set(['shell', 'mirv', 'homing', 'leapfrog', 'funky']);
     let falling = null;
     for (const p of match.projectiles) {
-      if (!p.rolling && !p.digging && p.vy > 160) { falling = p; break; }
+      if (WHISTLERS.has(p.kind) && !p.rolling && !p.digging && p.vy > 160) { falling = p; break; }
     }
     if (falling) { this.whistleStart(); this.whistleUpdate(falling.vy); }
     else this.whistleStop();

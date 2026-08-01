@@ -69,6 +69,7 @@ export class FxLab {
   fireWeapon(id) {
     const m = this.m();
     this.revive();
+    this.app.sound.fire(id, 60);
     m.phase = 'flight';
     m.flightTime = 0;
     const def = WEAPON_BY_ID[id];
