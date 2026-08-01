@@ -4,6 +4,10 @@ A modern browser remake of the 1991 DOS classic *Scorched Earth*: turn-based tan
 artillery on fully destructible procedural terrain, with the complete economy /
 armory / upgrade loop, AI personalities, and local or online multiplayer.
 
+**▶ [Play it now — drewsipher.github.io/scorch](https://drewsipher.github.io/scorch/)**
+*(the static site covers Campaign, Local Battle & Sandbox; online multiplayer
+needs the tiny Node server below)*
+
 ![genre](https://img.shields.io/badge/genre-artillery-orange) ![deps](https://img.shields.io/badge/runtime%20deps-1%20(ws)-green)
 
 ## Play
