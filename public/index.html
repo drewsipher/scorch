@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>SCORCH — Scorched Earth Reborn</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;600;700&family=Black+Ops+One&family=Press+Start+2P&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='0.9em' font-size='90'>💥</text></svg>">
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div id="hud" class="hidden">
+  <div id="hud-top">
+    <div id="hud-player" class="hud-panel">
+      <span id="hud-chip" class="chip"></span>
+      <span id="hud-name">—</span>
+      <span id="hud-hp" class="stat">HP <b>100</b></span>
+      <span id="hud-cash" class="stat">$0</span>
+      <span id="hud-fuel" class="stat hidden">⛽ <b>0</b></span>
+    </div>
+    <div id="hud-wind" class="hud-panel">
+      <canvas id="wind-sock" width="128" height="48"></canvas>
+      <span id="wind-val">0</span>
+    </div>
+    <div id="hud-round" class="hud-panel">
+      <span id="round-label">ROUND 1/5</span>
+      <button id="btn-sound" class="icon-btn" title="Sound">🔊</button>
+      <button id="btn-music" class="icon-btn" title="Music">🎵</button>
+    </div>
+  </div>
+
+  <div id="hud-bottom">
+    <div class="hud-panel" id="weapon-panel">
+      <button id="wpn-prev" class="mini-btn">◀</button>
+      <img id="wpn-icon" alt="" width="42" height="42">
+      <div id="wpn-info">
+        <div id="wpn-name">Baby Missile</div>
+        <div id="wpn-count">∞</div>
+      </div>
+      <button id="wpn-next" class="mini-btn">▶</button>
+      <button id="wpn-list-btn" class="mini-btn" title="Weapon rack (Q)">▤</button>
+    </div>
+    <div id="wpn-list" class="hidden"></div>
+    <div class="hud-panel" id="aim-panel">
+      <div class="aim-group">
+        <span class="lbl">ANGLE</span>
+        <button class="mini-btn" id="ang-minus">−</button>
+        <b id="ang-val">60°</b>
+        <button class="mini-btn" id="ang-plus">+</button>
+      </div>
+      <div class="aim-group">
+        <span class="lbl">POWER</span>
+        <button class="mini-btn" id="pow-minus">−</button>
+        <b id="pow-val">50</b>
+        <button class="mini-btn" id="pow-plus">+</button>
+      </div>
+      <div id="power-bar"><div id="power-fill"></div></div>
+    </div>
+    <div class="hud-panel" id="action-panel">
+      <button id="btn-battery" class="hud-btn" title="Use battery (B)">🔋<span id="bat-count"></span></button>
+      <button id="btn-fire" class="fire-btn">FIRE</button>
+    </div>
+  </div>
+  <div id="turn-banner" class="hidden"></div>
+  <div id="taunt" class="hidden"></div>
+  <div id="help-hint">←→ angle · ↑↓ power · Tab weapon · A/D move · Space fire · drag to aim</div>
+</div>
+
+<div id="overlay"></div>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

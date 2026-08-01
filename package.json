@@ -1,0 +1,20 @@
+{
+  "name": "scorch",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test/engine.test.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "Scorched Earth reborn — browser artillery game",
+  "dependencies": {
+    "ws": "^8.21.1"
+  },
+  "devDependencies": {
+    "puppeteer-core": "^25.4.0"
+  },
+  "type": "module"
+}
