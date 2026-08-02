@@ -246,6 +246,21 @@ export class Terrain {
     this.active = [];
   }
 
+  // Buried blast: convert the rock overburden above the chamber into sand so
+  // the plug pours down — a proper sinkhole instead of a sealed bubble.
+  sandifyChimney(cx, cy, halfW) {
+    const x0 = clamp(cx - halfW, 1, this.w - 2), x1 = clamp(cx + halfW, 1, this.w - 2);
+    let minTop = this.h;
+    for (let x = x0; x <= x1; x++) {
+      const top = this.topY(x);
+      if (top < minTop) minTop = top;
+      for (let y = top; y < Math.min(cy, this.h); y++) {
+        if (this.mask[y * this.w + x] === ROCK) this.mask[y * this.w + x] = SAND;
+      }
+    }
+    this.activate(x0 - 4, x1 + 4, Math.max(0, minTop - 10), this.h - 1);
+  }
+
   activate(x0, x1, y0 = 0, y1 = this.h - 1) {
     x0 = clamp(x0 | 0, 1, this.w - 2);
     x1 = clamp(x1 | 0, 1, this.w - 2);

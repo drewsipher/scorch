@@ -450,6 +450,53 @@ test('digging under a buried tank drops it into the cavity', () => {
   assert(t.y > yBefore + 20, `buried tank should drop into the cavity (fell ${t.y - yBefore}px)`);
 });
 
+test('airstrike is a laser: designates instantly, power irrelevant, shells follow', () => {
+  const stampFor = (power) => {
+    const m = makeMatch(8080);
+    m.startRound();
+    m.current.weapons.airstrike = 1;
+    m.applyAction({ type: 'fire', angle: 30, power, weapon: 'airstrike' });
+    const beam = m.projectiles.find(p => p.kind === 'beam');
+    assert(beam, 'beam spawned instantly');
+    let stamp = null, called = false, g = 0;
+    while (m.phase === 'flight' && g++ < 120000) {
+      m.step(SIM_DT);
+      for (const e of m.drainEvents()) {
+        if (e.type === 'strikeStamp') stamp = e;
+        if (e.type === 'airstrikeCall') called = true;
+      }
+      if (called && !m.projectiles.some(p => p.kind === 'beam')) break;
+    }
+    assert(stamp, 'stamp event fired');
+    assert(called, 'shells were called in');
+    return Math.round(stamp.x);
+  };
+  const a = stampFor(20);
+  const b = stampFor(95);
+  assert.equal(a, b, `laser target must ignore power (${a} vs ${b})`);
+});
+
+test('buried blasts sinkhole the surface (bunker buster chambers collapse)', () => {
+  const m = makeMatch(9090);
+  m.startRound();
+  const t = m.terrain;
+  const x = 900;
+  const surfBefore = t.topY(x);
+  // detonate deep underground, fully enclosed
+  m.explode(x, surfBefore + 140, 58, 0, 0, null);
+  let g = 0;
+  while (t.settling() && g++ < 8000) t.stepSand();
+  const surfAfter = t.topY(x);
+  assert(surfAfter > surfBefore + 20, `surface should cave in (dropped ${surfAfter - surfBefore}px)`);
+  // and no big sealed bubble remains under the new surface
+  let maxGap = 0, gap = 0;
+  for (let y = surfAfter; y < t.h; y++) {
+    if (!t.solid(x, y)) { gap++; maxGap = Math.max(maxGap, gap); }
+    else gap = 0;
+  }
+  assert(maxGap < 60, `sealed chamber should have collapsed (gap ${maxGap}px)`);
+});
+
 console.log('full AI matches (10 seeds)');
 for (const seed of [1, 2, 3, 4, 5, 101, 202, 303, 404, 505]) {
   test(`AI battle seed ${seed} completes without hanging`, () => {

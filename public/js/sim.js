@@ -285,18 +285,44 @@ export class Match {
         this.damageTank(t, selfDmg, null);
       }
     }
-    this.spawnProjectile({
-      weapon, owner: t.index,
-      x: bx, y: by,
-      vx: Math.cos(a) * v, vy: -Math.sin(a) * v,
-      kind: def.type,
-      bounces: def.bounces || 0,
-      hasSplit: false,
-    });
+    if (def.type === 'airstrike') {
+      // laser designation: power is irrelevant, the beam is instant
+      this.castStrikeBeam(t.index, bx, by, a);
+    } else {
+      this.spawnProjectile({
+        weapon, owner: t.index,
+        x: bx, y: by,
+        vx: Math.cos(a) * v, vy: -Math.sin(a) * v,
+        kind: def.type,
+        bounces: def.bounces || 0,
+        hasSplit: false,
+      });
+    }
     this.phase = 'flight';
     this.flightTime = 0;
     this.emit({ type: 'fire', tank: t.index, weapon, angle, power });
     return true;
+  }
+
+  // Trace the designator ray from the muzzle to whatever it paints: terrain,
+  // a tank, or (for sky shots) the ground under where the beam left the map.
+  castStrikeBeam(ownerIdx, ox, oy, ang) {
+    const dx = Math.cos(ang), dy = -Math.sin(ang);
+    let x = ox, y = oy, hitY = null;
+    for (let i = 0; i < 2600; i++) {
+      x += dx; y += dy;
+      if (x < 2 || x > WORLD_W - 2) { x = clamp(x, 2, WORLD_W - 2); break; }
+      if (y < -420 || y > WORLD_H - 2) break;
+      if (this.tankAt(x, y, ownerIdx, 99) || this.terrain.solid(x, y)) { hitY = y; break; }
+    }
+    const tx = clamp(x, 10, WORLD_W - 10);
+    const ty = hitY ?? this.terrain.topY(tx | 0);
+    this.spawnProjectile({
+      weapon: 'airstrike', owner: ownerIdx, kind: 'beam',
+      x: ox, y: oy, vx: 0, vy: 0,
+      bx: ox, by: oy, tx, ty,
+    });
+    this.emit({ type: 'laserOn', x: ox, y: oy, tx, ty });
   }
 
   spawnProjectile(p) {
@@ -359,6 +385,29 @@ export class Match {
       p.age += dt;
       let dead = false;
       if (p.kind === 'chunk' && p.age > 5) { continue; }
+      if (p.kind === 'beam') {
+        // 0-1s: laser. 1s: the stamp slams down. 1.5s: shells inbound.
+        if (!p.stamped && p.age >= 1.0) {
+          p.stamped = true;
+          this.emit({ type: 'strikeStamp', x: p.tx, y: p.ty });
+        }
+        if (p.age >= 1.5) {
+          const rng = makeRng((this.roundSeed ^ (p.id * 52711)) >>> 0);
+          for (let i = 0; i < 4; i++) {
+            this.spawnProjectile({
+              weapon: 'missile', owner: p.owner,
+              x: clamp(p.tx + rng.range(-55, 55) - i * 12, 20, WORLD_W - 20),
+              y: -60 - i * 90,
+              vx: rng.range(-10, 10), vy: 240,
+              kind: 'shell', hasSplit: true, trailColor: '#ffe08a',
+            });
+          }
+          this.emit({ type: 'airstrikeCall', x: p.tx, y: p.ty });
+          continue;   // beam expires as the shells arrive
+        }
+        remaining.push(p);
+        continue;
+      }
       if (p.kind === 'roller' && p.rolling) {
         dead = this.stepRoller(p, dt);
       } else if (p.digging) {
@@ -489,22 +538,7 @@ export class Match {
         p.digR = 6;
         return false;
       }
-      case 'airstrike': {
-        // marker flare pops, then four shells rain in from high above
-        this.explode(p.x, p.y, 12, 6, p.owner, def);
-        const rng = makeRng((this.roundSeed ^ (p.id * 52711)) >>> 0);
-        for (let i = 0; i < 4; i++) {
-          this.spawnProjectile({
-            weapon: 'missile', owner: p.owner,
-            x: clamp(p.x + rng.range(-70, 70) - i * 14, 20, WORLD_W - 20),
-            y: -60 - i * 90,
-            vx: rng.range(-14, 14), vy: 220,
-            kind: 'shell', hasSplit: true, trailColor: '#ffe08a',
-          });
-        }
-        this.emit({ type: 'airstrikeCall', x: p.x, y: p.y });
-        return true;
-      }
+
       case 'napalm': {
         this.spawnNapalm(p, def);
         this.explode(p.x, p.y, def.blast * 0.7, def.dmg * 0.5, p.owner, def);
@@ -681,6 +715,10 @@ export class Match {
     this.terrain.sandify(x | 0, y | 0, (radius * 1.45) | 0);
     // crater lips and overhangs collapse too
     this.terrain.looseOverhangs(x | 0, y | 0, (radius * 1.9) | 0);
+    // fully buried blast? the ground above caves in as a sinkhole
+    if (this.terrain.solid(x, y - radius - 14)) {
+      this.terrain.sandifyChimney(x | 0, y | 0, (radius * 0.9) | 0);
+    }
     // heavy blasts hurl physical debris that arcs, splats, and stings on impact
     if (this.projectiles.length < 60 && radius >= 20) {
       const rng = makeRng((this.roundSeed ^ Math.imul((x | 0) + 7, 2654435761) ^ Math.imul((y | 0) + 13, 40503)) >>> 0);

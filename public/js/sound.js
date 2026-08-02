@@ -144,6 +144,23 @@ export class Sound {
         this.thump(t, 110, 40, 0.5, 0.22);
         this.whoosh(t, 420, 1100, 0.32, 0.5, 0.5);
         break;
+      case 'airstrike': {
+        // designator hum: thin laser tone that sustains the full second
+        const o = this.ctx.createOscillator();
+        o.type = 'sawtooth';
+        o.frequency.setValueAtTime(1150, t);
+        o.frequency.linearRampToValueAtTime(1250, t + 1.0);
+        const f = this.ctx.createBiquadFilter();
+        f.type = 'bandpass'; f.frequency.value = 1600; f.Q.value = 4;
+        const g = this.ctx.createGain();
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(0.07, t + 0.06);
+        g.gain.setValueAtTime(0.07, t + 0.92);
+        g.gain.linearRampToValueAtTime(0, t + 1.02);
+        o.connect(f); f.connect(g); g.connect(this.sfx);
+        o.start(t); o.stop(t + 1.1);
+        break;
+      }
       case 'funky_bomb': {
         this.thump(t, 140, 50, 0.45, 0.18);
         // party spring
@@ -549,6 +566,15 @@ export class Sound {
         case 'battery': this.battery(); break;
         case 'dirt': this.dirt(); break;
         case 'buriedFire': this.explosion(0.7, false, 'dust'); break;
+        case 'strikeStamp':
+          // rubber-stamp KA-CHUNK
+          this.blip(180, 0.07, 'square', 0.3, 90);
+          this.blip(120, 0.16, 'sine', 0.35, 60, this.ctx.currentTime + 0.05);
+          break;
+        case 'airstrikeCall':
+          // distant jets inbound
+          this.whoosh(this.ctx.currentTime, 2600, 500, 0.22, 0.9, 0.7);
+          break;
         case 'parachute': this.parachute(); break;
         case 'turnStart': this.turn(); break;
         case 'deathBuildup': this.buildupWhine(e.duration); break;

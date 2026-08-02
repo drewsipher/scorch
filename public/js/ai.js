@@ -147,6 +147,13 @@ export function aiDecideTurn(match, me) {
     const towardRight = (target.x > me.x) === rightWay;
     angle = towardRight ? 12 + Math.random() * 76 : 92 + Math.random() * 76;
     power = 20 + Math.random() * 80;
+  } else if (weapon === 'airstrike') {
+    // the laser is line-of-sight: point straight at them and paint
+    const ox = me.x, oy = me.y - MUZZLE_PIVOT_DY;
+    const raw = Math.atan2(oy - (target.y - TANK_HIT_DY), target.x - ox) * 180 / Math.PI;
+    const err = Math.max(p.errMin * 0.5, 3) / skill;
+    angle = raw + (Math.random() * 2 - 1) * err;
+    power = 50;
   } else {
     // find a solution, then miss by a personality-sized wobble. The wobble
     // shrinks as they walk shots onto the same target, but never below the

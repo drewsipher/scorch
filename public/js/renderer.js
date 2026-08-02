@@ -156,6 +156,10 @@ export class Renderer {
       for (const p of match.projectiles) {
         minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x);
         minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y);
+        if (p.kind === 'beam') {
+          minX = Math.min(minX, p.tx); maxX = Math.max(maxX, p.tx);
+          minY = Math.min(minY, p.ty); maxY = Math.max(maxY, p.ty);
+        }
       }
       const cur = match.current;
       minX = Math.min(minX, cur.x); maxX = Math.max(maxX, cur.x);
@@ -245,6 +249,11 @@ export class Renderer {
               col: '150,130,105',
             });
           }
+          break;
+        }
+        case 'strikeStamp': {
+          this.particles.push({ kind: 'stamp', x: e.x, y: e.y, life: 1.0, t: 0 });
+          this.shakeIt(3);
           break;
         }
         case 'chunkHit': {
@@ -798,6 +807,26 @@ export class Renderer {
     const liveIds = new Set();
     for (const p of match.projectiles) {
       liveIds.add(p.id);
+      if (p.kind === 'beam') {
+        const [x0, y0] = w2s(p.bx, p.by);
+        const [x1, y1] = w2s(p.tx, p.ty);
+        const flick = 0.7 + 0.3 * Math.sin(this.time * 47);
+        const dim = p.age > 1.0 ? 0.45 : 1;   // beam holds under the stamp
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.strokeStyle = `rgba(255,40,40,${0.22 * flick * dim})`;
+        ctx.lineWidth = Math.max(4, 7 * z);
+        ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+        ctx.strokeStyle = `rgba(255,90,80,${0.85 * flick * dim})`;
+        ctx.lineWidth = Math.max(1.5, 2 * z);
+        ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+        // hot paint dot
+        const ds = Math.max(3, 4 * z) * flick;
+        ctx.fillStyle = 'rgba(255,220,210,0.95)';
+        ctx.fillRect(x1 - ds / 2, y1 - ds / 2, ds, ds);
+        ctx.restore();
+        continue;
+      }
       if (p.kind === 'chunk') {
         // tumbling debris chunk
         const [cx, cy] = w2s(p.x, p.y);
@@ -903,6 +932,35 @@ export class Renderer {
           ctx.beginPath();
           ctx.arc(x, y, r, 0, TAU);
           ctx.fill();
+          ctx.restore();
+          break;
+        }
+        case 'stamp': {
+          // slam from 2.4x to 1x in the first 120ms, tiny bounce, hold, fade
+          const slam = Math.min(p.t / 0.12, 1);
+          const bounce = p.t > 0.12 && p.t < 0.3 ? Math.sin((p.t - 0.12) / 0.18 * Math.PI) * 0.08 : 0;
+          const scale = (2.4 - 1.4 * (slam * slam)) + bounce;
+          const alpha = p.t < 0.6 ? 1 : 1 - (p.t - 0.6) / (p.life - 0.6);
+          const R = 30 * scale * z;
+          ctx.save();
+          ctx.globalCompositeOperation = 'lighter';
+          ctx.globalAlpha = alpha;
+          ctx.strokeStyle = '#ff3b30';
+          ctx.lineWidth = Math.max(2, 3.5 * z);
+          ctx.beginPath();
+          ctx.arc(x, y, R, 0, TAU);
+          ctx.stroke();
+          // four tick marks + center dot
+          for (let i = 0; i < 4; i++) {
+            const a2 = i * Math.PI / 2;
+            ctx.beginPath();
+            ctx.moveTo(x + Math.cos(a2) * R * 0.72, y + Math.sin(a2) * R * 0.72);
+            ctx.lineTo(x + Math.cos(a2) * R * 1.18, y + Math.sin(a2) * R * 1.18);
+            ctx.stroke();
+          }
+          const ds = Math.max(3, 4 * z);
+          ctx.fillStyle = '#ff3b30';
+          ctx.fillRect(x - ds / 2, y - ds / 2, ds, ds);
           ctx.restore();
           break;
         }

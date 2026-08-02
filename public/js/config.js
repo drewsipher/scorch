@@ -36,7 +36,7 @@ export const WEAPONS = [
   { id: 'dirt_clod', name: 'Dirt Clod', type: 'dirt', blast: 46, dmg: 0, price: 2500, qty: 5, trail: '#c9a06a', desc: 'Buries enemies in fresh soil.' },
   { id: 'ton_of_dirt', name: 'Ton of Dirt', type: 'dirt', blast: 92, dmg: 0, price: 6750, qty: 2, trail: '#b98d55', desc: 'An instant mountain, delivered ballistically.' },
   { id: 'homing_missile', name: 'Homing Missile', type: 'homing', blast: 40, dmg: 44, price: 10000, qty: 2, trail: '#c0ff4d', desc: 'Steers toward the nearest enemy.' },
-  { id: 'airstrike', name: 'Airstrike', type: 'airstrike', blast: 30, dmg: 34, price: 8000, qty: 2, trail: '#ffe08a', desc: 'Marks the target — four shells scream in from the sky.' },
+  { id: 'airstrike', name: 'Airstrike', type: 'airstrike', blast: 30, dmg: 34, price: 8000, qty: 2, trail: '#ff5c5c', desc: 'Paint the target with a laser — a strike rains from above. Power is irrelevant.' },
   { id: 'bunker_buster', name: 'Bunker Buster', type: 'buster', blast: 58, dmg: 62, tunnel: 55, price: 9000, qty: 2, trail: '#c9d2df', desc: 'Punches deep underground before detonating.' },
 ];
 

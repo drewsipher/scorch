@@ -74,7 +74,12 @@ export class FxLab {
     m.flightTime = 0;
     const def = WEAPON_BY_ID[id];
     const x = IMPACT_X + 180;
-    if (def.type === 'mirv') {
+    if (def.type === 'airstrike') {
+      // designate from up-right, painting the ground next to the dummy
+      const ox = x + 240, oy = this.groundY(x + 240) - 260;
+      const ang = Math.atan2(oy - this.groundY(IMPACT_X + 60), (IMPACT_X + 60) - ox);
+      m.castStrikeBeam(1, ox, oy, ang);
+    } else if (def.type === 'mirv') {
       // launch upward so it can split at apex like the real thing
       m.spawnProjectile({ weapon: id, owner: 1, x, y: this.groundY(x) - 60, vx: -30, vy: -420, kind: 'mirv', hasSplit: false });
     } else {
