@@ -305,6 +305,22 @@ export function buildIcon(id) {
       rect(g, 5, 6, 4, 4, '#e8e8e8');
       px(g, 6, 7, '#c83d3d'); px(g, 7, 8, '#c83d3d');
       break;
+    case 'shell':
+      // stubby artillery shell pointing right
+      rect(g, 4, 6, 5, 3, '#aab4c4');
+      px(g, 9, 6, '#8a92a3'); px(g, 9, 7, '#c9d2df'); px(g, 9, 8, '#8a92a3');
+      px(g, 10, 7, '#e8e8e8');
+      px(g, 3, 6, '#5a6273'); px(g, 3, 8, '#5a6273');
+      px(g, 5, 6, '#ffffff');
+      break;
+    case 'sidewinder':
+      // wavy green serpent-missile
+      px(g, 2, 9, '#6a9c3f'); px(g, 3, 8, '#9fc46a'); px(g, 4, 7, '#9fc46a');
+      px(g, 5, 6, '#9fc46a'); px(g, 6, 6, '#baf49a'); px(g, 7, 7, '#9fc46a');
+      px(g, 8, 8, '#9fc46a'); px(g, 9, 8, '#baf49a'); px(g, 10, 7, '#9fc46a');
+      px(g, 11, 6, '#d5ff4d'); px(g, 12, 6, '#ffd24d');
+      px(g, 2, 10, '#4a7030');
+      break;
     case 'airstrike':
       // target flare: beacon with radiating marks
       disc(g, 7, 8, 2.2, '#ffd24d');

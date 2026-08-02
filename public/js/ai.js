@@ -119,9 +119,11 @@ function pickWeapon(me, target, dist) {
   if (has('napalm') && dist < 420) return 'napalm';
   if (has('funky_bomb') && dist > 250) return 'funky_bomb';
   if (has('leapfrog')) return 'leapfrog';
+  if (has('sidewinder') && dist > 200) return 'sidewinder';
   if (has('missile')) return 'missile';
+  if (has('baby_missile')) return 'baby_missile';
   if (has('sandhog') && targetShielded) return 'sandhog';
-  return 'baby_missile';
+  return 'shell';
 }
 
 // Decide the AI's full turn. Returns action object for match.applyAction.
@@ -132,7 +134,7 @@ export function aiDecideTurn(match, me) {
     return { type: 'battery' };
   }
   const target = pickTarget(match, me, p.id === 'moron');
-  if (!target) return { type: 'fire', angle: 60, power: 40, weapon: 'baby_missile' };
+  if (!target) return { type: 'fire', angle: 60, power: 40, weapon: 'shell' };
 
   const mem = me.aiMemory;
   const dist = Math.abs(target.x - me.x);
@@ -191,11 +193,11 @@ const SHOP_PLANS = {
   none: { reserve: 0, list: [] },
   cheap: {
     reserve: 2000,
-    list: ['missile', 'battery', 'missile', 'parachute', 'roller'],
+    list: ['missile', 'baby_missile', 'battery', 'parachute', 'roller'],
   },
   mid: {
     reserve: 4000,
-    list: ['missile', 'shield', 'parachute', 'roller', 'napalm', 'battery', 'baby_nuke', 'leapfrog'],
+    list: ['missile', 'shield', 'parachute', 'roller', 'sidewinder', 'napalm', 'battery', 'baby_nuke', 'leapfrog'],
   },
   smart: {
     reserve: 5000,

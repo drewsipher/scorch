@@ -158,7 +158,7 @@ class App {
           const t = m.tanks[e.tank];
           // ensure selected weapon still exists
           if (!(t.weapons[t.selectedWeapon] > 0) && t.weapons[t.selectedWeapon] !== Infinity) {
-            t.selectedWeapon = 'baby_missile';
+            t.selectedWeapon = 'shell';
           }
           if (t.kind === 'ai') {
             this.scheduleAi(m, 1000 + Math.random() * 1400);

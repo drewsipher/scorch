@@ -19,25 +19,27 @@ export const FALL_GRACE = 24;
 // Weapons. blast = radius px. dmg = max damage at epicenter.
 // type drives projectile behavior in sim.js.
 export const WEAPONS = [
-  { id: 'baby_missile', name: 'Baby Missile', type: 'shell', blast: 24, dmg: 24, price: 0, qty: Infinity, trail: '#9ff2ff', desc: 'Standard issue. Free, forever.' },
-  { id: 'missile', name: 'Missile', type: 'shell', blast: 42, dmg: 46, price: 1875, qty: 5, trail: '#ffd28a', desc: 'A serious step up in yield.' },
-  { id: 'baby_nuke', name: 'Baby Nuke', type: 'shell', blast: 72, dmg: 78, price: 7000, qty: 3, trail: '#b8ff9e', nukeFlash: true, desc: 'Pocket-sized apocalypse.' },
-  { id: 'nuke', name: 'Nuke', type: 'shell', blast: 110, dmg: 120, price: 12000, qty: 1, trail: '#7dff9a', nukeFlash: true, desc: 'City-block eraser. Handle with pride.' },
-  { id: 'leapfrog', name: 'Leapfrog', type: 'leapfrog', blast: 34, dmg: 36, bounces: 3, price: 5000, qty: 2, trail: '#8ef2b0', desc: 'Detonates, hops onward, detonates again. x3.' },
-  { id: 'funky_bomb', name: 'Funky Bomb', type: 'funky', blast: 30, dmg: 30, bomblets: 7, price: 7000, qty: 2, trail: '#ff9af5', desc: 'Scatters a fistful of party favors.' },
-  { id: 'mirv', name: 'MIRV', type: 'mirv', blast: 34, dmg: 40, warheads: 5, price: 10000, qty: 3, trail: '#ffb3c8', desc: 'Splits at apogee into five warheads.' },
-  { id: 'deaths_head', name: "Death's Head", type: 'mirv', blast: 62, dmg: 70, warheads: 9, price: 20000, qty: 1, trail: '#ff8f8f', nukeFlash: true, desc: 'A MIRV that went to the gym.' },
-  { id: 'napalm', name: 'Napalm', type: 'napalm', blast: 26, dmg: 22, fuel: 60, price: 5000, qty: 3, trail: '#ffb066', desc: 'Liquid fire flows downhill.' },
-  { id: 'hot_napalm', name: 'Hot Napalm', type: 'napalm', blast: 34, dmg: 34, fuel: 110, price: 10000, qty: 2, trail: '#ff7d4d', desc: 'The deluxe barbecue package.' },
-  { id: 'roller', name: 'Roller', type: 'roller', blast: 40, dmg: 44, price: 3000, qty: 5, trail: '#9ecbff', desc: 'Rolls downhill seeking company.' },
-  { id: 'heavy_roller', name: 'Heavy Roller', type: 'roller', blast: 70, dmg: 76, price: 6750, qty: 2, trail: '#6fa8ff', desc: 'A boulder with a grudge.' },
-  { id: 'digger', name: 'Digger', type: 'digger', blast: 42, dmg: 46, tunnel: 140, price: 2500, qty: 5, trail: '#d6b98c', desc: 'Burrows straight through, then detonates at missile strength.' },
-  { id: 'sandhog', name: 'Sandhog', type: 'digger', blast: 55, dmg: 58, tunnel: 240, price: 6750, qty: 2, trail: '#e8cf9e', desc: 'Industrial-grade excavation with a warhead to match.' },
+  { id: 'shell', name: 'Shell', type: 'shell', blast: 12, dmg: 24, price: 0, qty: Infinity, trail: '#c9d2df', desc: 'Standard issue. Small bang, honest work. Free, forever.' },
+  { id: 'baby_missile', name: 'Baby Missile', type: 'shell', blast: 24, dmg: 27, price: 600, qty: 10, trail: '#9ff2ff', desc: 'Twice the crater of a shell.' },
+  { id: 'missile', name: 'Missile', type: 'shell', blast: 42, dmg: 52, price: 1875, qty: 5, trail: '#ffd28a', desc: 'A serious step up in yield.' },
+  { id: 'baby_nuke', name: 'Baby Nuke', type: 'shell', blast: 72, dmg: 86, price: 7000, qty: 3, trail: '#b8ff9e', nukeFlash: true, desc: 'Pocket-sized apocalypse.' },
+  { id: 'nuke', name: 'Nuke', type: 'shell', blast: 110, dmg: 135, price: 12000, qty: 1, trail: '#7dff9a', nukeFlash: true, desc: 'City-block eraser. Handle with pride.' },
+  { id: 'leapfrog', name: 'Leapfrog', type: 'leapfrog', blast: 34, dmg: 40, bounces: 3, price: 5000, qty: 2, trail: '#8ef2b0', desc: 'Detonates, hops onward, detonates again. x3.' },
+  { id: 'funky_bomb', name: 'Funky Bomb', type: 'funky', blast: 30, dmg: 34, bomblets: 7, price: 7000, qty: 2, trail: '#ff9af5', desc: 'Scatters a fistful of party favors.' },
+  { id: 'mirv', name: 'MIRV', type: 'mirv', blast: 34, dmg: 45, warheads: 5, price: 10000, qty: 3, trail: '#ffb3c8', desc: 'Splits at apogee into five warheads.' },
+  { id: 'deaths_head', name: "Death's Head", type: 'mirv', blast: 62, dmg: 78, warheads: 9, price: 20000, qty: 1, trail: '#ff8f8f', nukeFlash: true, desc: 'A MIRV that went to the gym.' },
+  { id: 'napalm', name: 'Napalm', type: 'napalm', blast: 26, dmg: 25, fuel: 60, price: 5000, qty: 3, trail: '#ffb066', desc: 'Liquid fire flows downhill.' },
+  { id: 'hot_napalm', name: 'Hot Napalm', type: 'napalm', blast: 34, dmg: 38, fuel: 110, price: 10000, qty: 2, trail: '#ff7d4d', desc: 'The deluxe barbecue package.' },
+  { id: 'roller', name: 'Roller', type: 'roller', blast: 40, dmg: 49, price: 3000, qty: 5, trail: '#9ecbff', desc: 'Rolls downhill seeking company.' },
+  { id: 'heavy_roller', name: 'Heavy Roller', type: 'roller', blast: 70, dmg: 85, price: 6750, qty: 2, trail: '#6fa8ff', desc: 'A boulder with a grudge.' },
+  { id: 'digger', name: 'Digger', type: 'digger', blast: 42, dmg: 52, tunnel: 140, price: 2500, qty: 5, trail: '#d6b98c', desc: 'Burrows straight through, then detonates at missile strength.' },
+  { id: 'sandhog', name: 'Sandhog', type: 'digger', blast: 55, dmg: 65, tunnel: 240, price: 6750, qty: 2, trail: '#e8cf9e', desc: 'Industrial-grade excavation with a warhead to match.' },
   { id: 'dirt_clod', name: 'Dirt Clod', type: 'dirt', blast: 46, dmg: 0, price: 2500, qty: 5, trail: '#c9a06a', desc: 'Buries enemies in fresh soil.' },
   { id: 'ton_of_dirt', name: 'Ton of Dirt', type: 'dirt', blast: 92, dmg: 0, price: 6750, qty: 2, trail: '#b98d55', desc: 'An instant mountain, delivered ballistically.' },
-  { id: 'homing_missile', name: 'Homing Missile', type: 'homing', blast: 40, dmg: 44, price: 10000, qty: 2, trail: '#c0ff4d', desc: 'Steers toward the nearest enemy.' },
-  { id: 'airstrike', name: 'Airstrike', type: 'airstrike', blast: 30, dmg: 34, price: 8000, qty: 2, trail: '#ff5c5c', desc: 'Paint the target with a laser — a strike rains from above. Power is irrelevant.' },
-  { id: 'bunker_buster', name: 'Bunker Buster', type: 'buster', blast: 58, dmg: 62, tunnel: 55, price: 9000, qty: 2, trail: '#c9d2df', desc: 'Punches deep underground before detonating.' },
+  { id: 'homing_missile', name: 'Homing Missile', type: 'homing', blast: 40, dmg: 50, price: 10000, qty: 2, trail: '#c0ff4d', desc: 'Locks on and hunts. Rarely disappointed.' },
+  { id: 'sidewinder', name: 'Sidewinder', type: 'sidewinder', blast: 36, dmg: 48, price: 6500, qty: 3, trail: '#9affd0', desc: 'Corkscrews wildly downrange, then bursts into a storm of shrapnel.' },
+  { id: 'airstrike', name: 'Airstrike', type: 'airstrike', blast: 30, dmg: 38, price: 8000, qty: 2, trail: '#ff5c5c', desc: 'Paint the target with a laser — a strike rains from above. Power is irrelevant.' },
+  { id: 'bunker_buster', name: 'Bunker Buster', type: 'buster', blast: 58, dmg: 70, tunnel: 55, price: 9000, qty: 2, trail: '#c9d2df', desc: 'Punches deep underground before detonating.' },
 ];
 
 export const ITEMS = [
@@ -88,7 +90,7 @@ export const FOE_TIERS = [
   { missile: 5, roller: 3 },                                                            // 2
   { missile: 10, roller: 3, napalm: 2, leapfrog: 2 },                                   // 3
   { missile: 10, baby_nuke: 2, roller: 5, napalm: 3, homing_missile: 1 },               // 4
-  { missile: 10, baby_nuke: 3, mirv: 2, hot_napalm: 2, heavy_roller: 2, homing_missile: 2 }, // 5
+  { missile: 10, baby_nuke: 3, mirv: 2, hot_napalm: 2, heavy_roller: 2, homing_missile: 2, sidewinder: 2 }, // 5
   { nuke: 1, baby_nuke: 3, mirv: 3, hot_napalm: 2, heavy_roller: 3, homing_missile: 2, funky_bomb: 2, airstrike: 1 }, // 6
   { nuke: 2, deaths_head: 1, mirv: 3, baby_nuke: 4, hot_napalm: 3, homing_missile: 3, sandhog: 2, airstrike: 2, bunker_buster: 2 }, // 7
 ];

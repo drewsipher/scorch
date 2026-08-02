@@ -571,6 +571,30 @@ export class Sound {
           this.blip(180, 0.07, 'square', 0.3, 90);
           this.blip(120, 0.16, 'sine', 0.35, 60, this.ctx.currentTime + 0.05);
           break;
+        case 'nukeballStart': {
+          // rising psychedelic shimmer for the charge-up
+          const t0 = this.ctx.currentTime;
+          [220, 277, 330].forEach((f, i) => {
+            const o = this.ctx.createOscillator();
+            o.type = 'sine';
+            o.frequency.setValueAtTime(f, t0);
+            o.frequency.exponentialRampToValueAtTime(f * 3.2, t0 + 2.3);
+            const g = this.ctx.createGain();
+            g.gain.setValueAtTime(0.0001, t0);
+            g.gain.exponentialRampToValueAtTime(0.05, t0 + 0.5);
+            g.gain.setValueAtTime(0.05, t0 + 2.1);
+            g.gain.linearRampToValueAtTime(0, t0 + 2.4);
+            o.connect(g); g.connect(this.sfx);
+            o.start(t0); o.stop(t0 + 2.5);
+          });
+          break;
+        }
+        case 'nukeballImplode': {
+          // sharp suck, then the void claps shut
+          this.whoosh(this.ctx.currentTime, 300, 3400, 0.3, 0.25, 1.5);
+          this.explosion(2.2, true);
+          break;
+        }
         case 'airstrikeCall':
           // distant jets inbound
           this.whoosh(this.ctx.currentTime, 2600, 500, 0.22, 0.9, 0.7);
@@ -588,7 +612,7 @@ export class Sound {
     }
     // whistle tracking: only true shells scream — never dirt, drills,
     // canisters, rollers, or flying debris
-    const WHISTLERS = new Set(['shell', 'mirv', 'homing', 'leapfrog', 'funky', 'airstrike', 'buster']);
+    const WHISTLERS = new Set(['shell', 'mirv', 'homing', 'leapfrog', 'funky', 'airstrike', 'buster', 'sidewinder']);
     let falling = null;
     for (const p of match.projectiles) {
       if (WHISTLERS.has(p.kind) && !p.rolling && !p.digging && p.vy > 160) { falling = p; break; }

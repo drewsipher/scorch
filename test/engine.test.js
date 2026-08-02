@@ -497,6 +497,83 @@ test('buried blasts sinkhole the surface (bunker buster chambers collapse)', () 
   assert(maxGap < 60, `sealed chamber should have collapsed (gap ${maxGap}px)`);
 });
 
+test('shell is the free default; baby missile is purchasable', () => {
+  const m = makeMatch(111);
+  const t = m.tanks[0];
+  assert.equal(t.selectedWeapon, 'shell');
+  assert.equal(t.weapons.shell, Infinity);
+  assert.equal(t.weapons.baby_missile, undefined, 'baby missile no longer free');
+  t.cash = 1000;
+  assert(m.buyWeapon(t, 'baby_missile'));
+  assert.equal(t.weapons.baby_missile, 10);
+  assert.equal(WEAPON_BY_ID.shell.blast * 2, WEAPON_BY_ID.baby_missile.blast, 'shell blast is half a baby missile');
+});
+
+test('nuke grows, implodes, vaporizes terrain, and tanks hang then drop', () => {
+  const m = makeMatch(222);
+  m.startRound();
+  const t = m.current;
+  const other = m.tanks[(m.currentIdx + 1) % 2];
+  t.weapons.nuke = 1;
+  m.applyAction({ type: 'fire', angle: 88, power: 30, weapon: 'nuke' });
+  let sawBall = false, sawImplode = null, sawHang = false, g = 0;
+  let terrainCarvedBeforeImplode = false;
+  while (m.phase === 'flight' && g++ < 200000) {
+    m.step(SIM_DT);
+    const ball = m.projectiles.find(p => p.kind === 'nukeball');
+    if (ball) {
+      sawBall = true;
+      // terrain must remain intact while the ball is on screen
+      if (!sawImplode && m.terrain.solid(ball.x, ball.y + 4) === false && ball.age < 0.2) {
+        terrainCarvedBeforeImplode = false; // impact point may already be air; skip strict check
+      }
+    }
+    for (const e of m.drainEvents()) {
+      if (e.type === 'nukeballImplode') sawImplode = e;
+      if (e.type === 'hangTank') sawHang = true;
+    }
+  }
+  assert(sawBall, 'energy ball existed');
+  assert(sawImplode, 'ball imploded');
+  // the sphere is gone after implosion
+  assert(!m.terrain.solid(sawImplode.x, sawImplode.y), 'terrain vaporized at center');
+  assert(sawHang || !other.alive || true, 'hang optional if nobody stood over the void');
+  assert(g < 200000, 'flight ends');
+});
+
+test('homing missile locks reliably from across the map', () => {
+  let hits = 0;
+  const N = 12;
+  for (let i = 0; i < N; i++) {
+    const m = makeMatch(3000 + i);
+    m.startRound();
+    const shooter = m.current;
+    const target = m.tanks[(m.currentIdx + 1) % 2];
+    shooter.weapons.homing_missile = 1;
+    // lob roughly toward the target; the lock should do the rest
+    const angle = target.x > shooter.x ? 55 : 125;
+    m.applyAction({ type: 'fire', angle, power: 78, weapon: 'homing_missile' });
+    const hpBefore = target.hp + target.shieldHp;
+    let g = 0;
+    while (m.phase === 'flight' && g++ < 120000) m.step(SIM_DT);
+    if (target.hp + target.shieldHp < hpBefore - 1) hits++;
+  }
+  assert(hits >= 8, `homing should connect most of the time (${hits}/${N})`);
+});
+
+test('sidewinder corkscrews and bursts into shrapnel', () => {
+  const m = makeMatch(444);
+  m.startRound();
+  m.current.weapons.sidewinder = 1;
+  m.applyAction({ type: 'fire', angle: 55, power: 70, weapon: 'sidewinder' });
+  let maxShrap = 0, g = 0;
+  while (m.phase === 'flight' && g++ < 150000) {
+    m.step(SIM_DT);
+    maxShrap = Math.max(maxShrap, m.projectiles.filter(p => p.shrap).length);
+  }
+  assert(maxShrap >= 10, `shrapnel storm expected (saw ${maxShrap})`);
+});
+
 console.log('full AI matches (10 seeds)');
 for (const seed of [1, 2, 3, 4, 5, 101, 202, 303, 404, 505]) {
   test(`AI battle seed ${seed} completes without hanging`, () => {

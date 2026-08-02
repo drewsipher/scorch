@@ -27,11 +27,11 @@ const lab = await page.evaluate(() => ({
   deathBtns: document.querySelectorAll('#fx-deaths .fx-btn').length,
 }));
 console.log('LAB:', JSON.stringify(lab));
-if (!lab.panel || lab.weaponBtns !== 19 || lab.deathBtns !== 7) errors.push('lab layout wrong: ' + JSON.stringify(lab));
+if (!lab.panel || lab.weaponBtns !== 21 || lab.deathBtns !== 7) errors.push('lab layout wrong: ' + JSON.stringify(lab));
 
-// fire a nuke, check debris chunks fly
+// fire a missile, check debris chunks fly (nukes vaporize instead)
 await page.evaluate(() => {
-  [...document.querySelectorAll('#fx-weapons .fx-btn')].find(b => b.textContent.trim() === 'Nuke').click();
+  [...document.querySelectorAll('#fx-weapons .fx-btn')].find(b => b.textContent.trim() === 'Missile').click();
 });
 let sawChunks = 0;
 for (let i = 0; i < 80; i++) {
@@ -41,8 +41,20 @@ for (let i = 0; i < 80; i++) {
   await sleep(150);
 }
 console.log('debris chunks in flight (max seen):', sawChunks);
-if (sawChunks < 4) errors.push('nuke should hurl debris chunks, saw ' + sawChunks);
+if (sawChunks < 4) errors.push('missile should hurl debris chunks, saw ' + sawChunks);
+// nuke: psychedelic energy ball appears
+await page.evaluate(() => {
+  [...document.querySelectorAll('#fx-weapons .fx-btn')].find(b => b.textContent.trim() === 'Nuke').click();
+});
+let sawBall = false;
+for (let i = 0; i < 80; i++) {
+  sawBall = await page.evaluate(() => window.app.match.projectiles.some(p => p.kind === 'nukeball'));
+  if (sawBall) break;
+  await sleep(150);
+}
+if (!sawBall) errors.push('nuke should form an energy ball');
 await page.screenshot({ path: `${SHOTS}/80-fxlab-nuke.png` });
+await sleep(3500); // let it implode before the death tests
 
 // slow-mo + cascade death
 await page.evaluate(() => {

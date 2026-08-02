@@ -30,14 +30,15 @@ export class Tank {
     this.x = 0; this.y = 0;
     this.angle = 60;                    // degrees from horizontal, 0..180 (left=180)
     this.power = 50;
-    this.weapons = { baby_missile: Infinity };
+    this.weapons = { shell: Infinity };
     this.items = {};                    // itemId -> count
-    this.selectedWeapon = 'baby_missile';
+    this.selectedWeapon = 'shell';
     this.shieldHp = 0;
     this.fuel = 0;
     this.stats = { kills: 0, dmgDealt: 0, wins: 0 };
     this.aiMemory = null;               // per-round learning state
     this.lastDamager = null;
+    this.hangTime = 0;                  // cartoon hangtime after a nuke vaporizes the ground
   }
 
   hasWeapon(id) { return (this.weapons[id] || 0) > 0; }
@@ -141,6 +142,7 @@ export class Match {
       t.y = this.terrain.topY(t.x | 0);
       t.aiMemory = {};
       t.lastDamager = null;
+      t.hangTime = 0;
       t.roundDmg = 0;
       t.roundKills = 0;
       // auto-arm shield if owned
@@ -262,7 +264,7 @@ export class Match {
       t.x = clamp(x, TANK_RADIUS, WORLD_W - TANK_RADIUS);
       t.y = this.terrain.topY(t.x | 0);
     }
-    if (!t.hasWeapon(weapon)) weapon = 'baby_missile';
+    if (!t.hasWeapon(weapon)) weapon = 'shell';
     const def = WEAPON_BY_ID[weapon];
     if (t.weapons[weapon] !== Infinity) {
       t.weapons[weapon]--;
@@ -340,6 +342,15 @@ export class Match {
     this.stepProjectiles(dt);
     this.stepNapalm(dt);
     this.stepDying(dt);
+    // cartoon hangtime expires -> gravity notices
+    let hangDone = false;
+    for (const t of this.tanks) {
+      if (t.hangTime > 0) {
+        t.hangTime -= dt;
+        if (t.hangTime <= 0) { t.hangTime = 0; hangDone = true; }
+      }
+    }
+    if (hangDone) this.tanksFall();
     // Noita-style sand settling: 3 passes per 30Hz tick (fast pour)
     this._sandAcc = (this._sandAcc || 0) + dt;
     while (this._sandAcc >= 1 / 30) {
@@ -351,7 +362,8 @@ export class Match {
       if (movedAny) this.tanksFall();
     }
     // end of flight?
-    const entitiesDone = this.projectiles.length === 0 && this.napalm.length === 0 && this.dying.length === 0;
+    const entitiesDone = this.projectiles.length === 0 && this.napalm.length === 0 &&
+      this.dying.length === 0 && !this.tanks.some(t => t.hangTime > 0);
     if (entitiesDone && this.terrain.settling()) {
       // give the pour a moment of screen time, then snap the stragglers home
       this._settleGrace = (this._settleGrace || 0) + dt;
@@ -385,6 +397,17 @@ export class Match {
       p.age += dt;
       let dead = false;
       if (p.kind === 'chunk' && p.age > 5) { continue; }
+      if (p.kind === 'sidewinder' && p.age > 3.5) {
+        // fuse: airburst with the full shrapnel payload
+        this.impact(p, null);
+        continue;
+      }
+      if (p.kind === 'nukeball') {
+        // grow (1.2s) -> fluctuate (0.8s) -> implode (0.4s) -> gone
+        if (p.age >= 2.4) { this.implodeNukeball(p); continue; }
+        remaining.push(p);
+        continue;
+      }
       if (p.kind === 'beam') {
         // 0-1s: laser. 1s: the stamp slams down. 1.5s: shells inbound.
         if (!p.stamped && p.age >= 1.0) {
@@ -418,8 +441,19 @@ export class Match {
         const sdt = dt / steps;
         for (let s = 0; s < steps && !dead; s++) {
           if (p.kind !== 'roller') p.vx += windAccel * sdt;
-          p.vy += GRAV * sdt;
+          const gravScale = (p.kind === 'sidewinder' && p.age > 0.45) ? 0.55
+            : (p.kind === 'homing' && p.homingLock) ? 0.4 : 1;
+          p.vy += GRAV * gravScale * sdt;
           if (p.kind === 'homing') this.steerHoming(p, sdt);
+          if (p.kind === 'sidewinder' && p.age > 0.45) {
+            // corkscrew: oscillate perpendicular to the flight direction
+            p.spiral = (p.spiral || 0) + sdt * 11;
+            const sp = Math.max(Math.hypot(p.vx, p.vy), 1);
+            const px2 = -p.vy / sp, py2 = p.vx / sp;
+            const swing = Math.cos(p.spiral) * 300;
+            p.x += px2 * swing * sdt;
+            p.y += py2 * swing * sdt;
+          }
           p.x += p.vx * sdt;
           p.y += p.vy * sdt;
           // MIRV split at apex
@@ -460,17 +494,21 @@ export class Match {
   }
 
   steerHoming(p, dt) {
-    let best = null, bestD = 380;
+    let best = null, bestD = 900;
     for (const t of this.tanks) {
       if (!t.alive || t.index === p.owner) continue;
       const d = Math.hypot(t.x - p.x, t.y - p.y);
       if (d < bestD) { bestD = d; best = t; }
     }
     if (best) {
+      // proper lock: bend the velocity vector onto the intercept line while
+      // keeping speed — gentle at range, vicious up close
       const d = Math.max(bestD, 1);
-      const steer = 900;
-      p.vx += ((best.x - p.x) / d) * steer * dt;
-      p.vy += ((best.y - TANK_HIT_DY - p.y) / d) * steer * dt;
+      const dx = (best.x - p.x) / d, dy = (best.y - TANK_HIT_DY - p.y) / d;
+      const sp = Math.max(Math.hypot(p.vx, p.vy), 140);
+      const k = Math.min(1, (1.2 + 3.4 * (1 - d / 900)) * dt);
+      p.vx += (dx * sp - p.vx) * k;
+      p.vy += (dy * sp - p.vy) * k;
       p.homingLock = true;
     }
   }
@@ -579,7 +617,33 @@ export class Match {
         }
         return true;
       }
+      case 'sidewinder': {
+        this.explode(p.x, p.y, def.blast, def.dmg, p.owner, def);
+        const rng = makeRng((this.roundSeed ^ (p.id * 60493)) >>> 0);
+        if (this.projectiles.length < 70) {
+          for (let i = 0; i < 12; i++) {
+            const a2 = rng.range(0, Math.PI * 2);
+            const sp2 = rng.range(160, 420);
+            this.spawnProjectile({
+              weapon: 'shell', kind: 'chunk', owner: p.owner,
+              x: p.x + Math.cos(a2) * 6, y: p.y - 6 + Math.sin(a2) * 6,
+              vx: Math.cos(a2) * sp2, vy: Math.sin(a2) * sp2 - 60,
+              chunkDmg: rng.range(4, 8), chunkSz: rng.range(1.6, 3), shrap: true,
+            });
+          }
+        }
+        return true;
+      }
       default: {
+        if (def.nukeFlash && (p.weapon === 'nuke' || p.weapon === 'baby_nuke')) {
+          // psychedelic energy ball: grows, fluctuates, implodes
+          this.spawnProjectile({
+            weapon: p.weapon, owner: p.owner, kind: 'nukeball',
+            x: p.x, y: p.y, vx: 0, vy: 0, r: def.blast,
+          });
+          this.emit({ type: 'nukeballStart', x: p.x, y: p.y, r: def.blast });
+          return true;
+        }
         this.explode(p.x, p.y, def.blast, def.dmg, p.owner, def);
         return true;
       }
@@ -868,6 +932,38 @@ export class Match {
     this.dying = this.dying.filter(d => !d.done);
   }
 
+  implodeNukeball(p) {
+    const def = WEAPON_BY_ID[p.weapon];
+    const x = clamp(p.x, 0, WORLD_W - 1), y = Math.min(p.y, WORLD_H - 1);
+    const r = p.r;
+    const owner = this.tanks[p.owner] ?? null;
+    for (const t of this.tanks) {
+      if (!t.alive) continue;
+      const d = Math.hypot(t.x - x, (t.y - TANK_HIT_DY) - y);
+      const reach = r + 22;
+      if (d < reach) {
+        const dmg = def.dmg * clamp(1 - d / reach, 0, 1) ** 0.8;
+        if (dmg > 1) this.damageTank(t, dmg, owner);
+      }
+    }
+    // vaporized: a clean sphere, thin loose rim, lips and roof collapse
+    this.terrain.carve(x | 0, y | 0, r | 0);
+    this.terrain.sandify(x | 0, y | 0, (r * 1.12) | 0);
+    this.terrain.looseOverhangs(x | 0, y | 0, (r * 1.6) | 0);
+    if (this.terrain.solid(x, y - r - 14)) {
+      this.terrain.sandifyChimney(x | 0, y | 0, (r * 0.9) | 0);
+    }
+    // cartoon physics: tanks over the void hang for a beat before dropping
+    for (const t of this.tanks) {
+      if (!t.alive) continue;
+      if (!this.terrain.solid(t.x, t.y)) {
+        t.hangTime = 0.55;
+        this.emit({ type: 'hangTank', tank: t.index, x: t.x, y: t.y });
+      }
+    }
+    this.emit({ type: 'nukeballImplode', x, y, r, weapon: p.weapon });
+  }
+
   // Test/compat helper: fast-forward all death sequences and sand settling.
   resolveDeaths() {
     let g = 0;
@@ -880,6 +976,7 @@ export class Match {
   tanksFall() {
     for (const t of this.tanks) {
       if (!t.alive) continue;
+      if (t.hangTime > 0) continue;   // cartoon hangtime: not yet!
       // find real support under the tank's feet — not just the column top.
       // A buried tank must drop when the ground UNDER it is dug away, even
       // though the mound above it still owns topY. Thin crusts (<6px) over a

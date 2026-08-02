@@ -156,6 +156,11 @@ export class Renderer {
       for (const p of match.projectiles) {
         minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x);
         minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y);
+        if (p.kind === 'nukeball') {
+          // keep the whole energy ball in frame
+          minX = Math.min(minX, p.x - p.r * 1.6); maxX = Math.max(maxX, p.x + p.r * 1.6);
+          minY = Math.min(minY, p.y - p.r * 1.6); maxY = Math.max(maxY, p.y + p.r * 1.6);
+        }
         if (p.kind === 'beam') {
           minX = Math.min(minX, p.tx); maxX = Math.max(maxX, p.tx);
           minY = Math.min(minY, p.ty); maxY = Math.max(maxY, p.ty);
@@ -249,6 +254,29 @@ export class Renderer {
               col: '150,130,105',
             });
           }
+          break;
+        }
+        case 'nukeballStart': this.shakeIt(4); break;
+        case 'nukeballImplode': {
+          this.flash = Math.min(1, this.flash + 0.85);
+          this.shakeIt(24);
+          this.punch = Math.min((this.punch || 0) + 0.06, 0.09);
+          // green energy burst
+          for (let i = 0; i < 40; i++) {
+            const a2 = Math.random() * TAU, sp2 = 80 + Math.random() * 380;
+            this.particles.push({
+              kind: 'debris', x: e.x, y: e.y,
+              vx: Math.cos(a2) * sp2, vy: Math.sin(a2) * sp2,
+              life: 0.8 + Math.random() * 0.6, t: 0, sz: 1.6 + Math.random() * 2,
+              col: Math.random() < 0.5 ? '#8dffa0' : '#e8fff0',
+            });
+          }
+          this.particles.push({ kind: 'aoe', x: e.x, y: e.y, r: e.r, life: 1.1, t: 0, col: '#7dff9a' });
+          this.particles.push({ kind: 'ring', x: e.x, y: e.y, r0: e.r * 1.4, r1: e.r * 0.2, life: 0.5, t: 0, col: '#8dffa0' });
+          break;
+        }
+        case 'hangTank': {
+          this.fxText(e.x, e.y - 52, '!!', '#ffd24d');
           break;
         }
         case 'strikeStamp': {
@@ -567,7 +595,8 @@ export class Renderer {
       ctx.restore();
     }
 
-    // particles
+    // particles (with a green radiation glow near active energy balls)
+    this._balls = match.projectiles.filter(pp => pp.kind === 'nukeball');
     this.drawParticles(ctx, w2s, z, dt);
 
     // full-screen nuke flash
@@ -686,6 +715,7 @@ export class Renderer {
     const slope = (terr.topY((t.x - 12) | 0) - terr.topY((t.x + 12) | 0)) / 24;
     const targetTilt = clamp(Math.atan(slope), -0.42, 0.42);
     t._tilt = lerp(t._tilt ?? targetTilt, targetTilt, 0.15);
+    if (t.hangTime > 0) t._tilt += Math.sin(this.time * 26) * 0.07;
 
     // ground contact shadow
     ctx.save();
@@ -807,6 +837,61 @@ export class Renderer {
     const liveIds = new Set();
     for (const p of match.projectiles) {
       liveIds.add(p.id);
+      if (p.kind === 'nukeball') {
+        const [cx, cy] = w2s(p.x, p.y);
+        const t = p.age;
+        let R;
+        if (t < 1.2) {
+          const g = t / 1.2;
+          R = p.r * (1 - Math.pow(1 - g, 3));           // ease-out growth
+        } else if (t < 2.0) {
+          R = p.r * (1 + 0.09 * Math.sin(t * 21) + 0.04 * Math.sin(t * 47));
+        } else {
+          R = p.r * Math.pow(Math.max(0, 1 - (t - 2.0) / 0.4), 1.6);
+        }
+        const Rz = Math.max(2, R * z);
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        // green aura
+        const aura = ctx.createRadialGradient(cx, cy, Rz * 0.4, cx, cy, Rz * 1.9);
+        aura.addColorStop(0, 'rgba(120,255,140,0.30)');
+        aura.addColorStop(1, 'rgba(60,255,120,0)');
+        ctx.fillStyle = aura;
+        ctx.beginPath(); ctx.arc(cx, cy, Rz * 1.9, 0, TAU); ctx.fill();
+        // psychedelic shells: hue-cycling rings
+        for (let i = 0; i < 3; i++) {
+          const hue = (this.time * 170 + i * 120) % 360;
+          const rr = Rz * (0.55 + i * 0.22) * (1 + 0.05 * Math.sin(this.time * 13 + i * 2));
+          ctx.fillStyle = `hsla(${hue | 0},100%,62%,0.28)`;
+          ctx.beginPath(); ctx.arc(cx, cy, rr, 0, TAU); ctx.fill();
+        }
+        // blinding core
+        ctx.fillStyle = 'rgba(255,255,255,0.9)';
+        ctx.beginPath(); ctx.arc(cx, cy, Rz * 0.3, 0, TAU); ctx.fill();
+        // orbiting energy motes
+        for (let i = 0; i < 7; i++) {
+          const a2 = this.time * (2.4 + i * 0.3) + i * 0.9;
+          const or2 = Rz * (1.05 + 0.16 * Math.sin(this.time * 5 + i));
+          const hue = (this.time * 220 + i * 51) % 360;
+          ctx.fillStyle = `hsla(${hue | 0},100%,70%,0.85)`;
+          const ms = Math.max(2, 3 * z);
+          ctx.fillRect(cx + Math.cos(a2) * or2 - ms / 2, cy + Math.sin(a2) * or2 - ms / 2, ms, ms);
+        }
+        // implosion suck-streaks
+        if (t >= 2.0) {
+          ctx.strokeStyle = 'rgba(160,255,180,0.6)';
+          ctx.lineWidth = Math.max(1, 1.6 * z);
+          for (let i = 0; i < 10; i++) {
+            const a2 = i * TAU / 10 + this.time * 3;
+            ctx.beginPath();
+            ctx.moveTo(cx + Math.cos(a2) * Rz * 2.4, cy + Math.sin(a2) * Rz * 2.4);
+            ctx.lineTo(cx + Math.cos(a2) * Rz * 1.1, cy + Math.sin(a2) * Rz * 1.1);
+            ctx.stroke();
+          }
+        }
+        ctx.restore();
+        continue;
+      }
       if (p.kind === 'beam') {
         const [x0, y0] = w2s(p.bx, p.by);
         const [x1, y1] = w2s(p.tx, p.ty);
@@ -834,7 +919,7 @@ export class Renderer {
         ctx.save();
         ctx.translate(cx, cy);
         ctx.rotate(p.age * 7);
-        ctx.fillStyle = this.theme ? this.theme.terrainTop : '#8a7458';
+        ctx.fillStyle = p.shrap ? '#c9d2df' : (this.theme ? this.theme.terrainTop : '#8a7458');
         ctx.fillRect(-sz / 2, -sz / 2, sz, sz);
         ctx.fillStyle = 'rgba(0,0,0,0.35)';
         ctx.fillRect(-sz / 2, 0, sz, sz / 2);
@@ -1050,6 +1135,20 @@ export class Renderer {
           if (p.t < 0) break;
           p.vy += 300 * dt;
           p.x += p.vx * dt; p.y += p.vy * dt;
+          if (this._balls && this._balls.length) {
+            for (const b of this._balls) {
+              const bd = Math.hypot(p.x - b.x, p.y - b.y);
+              if (bd < b.r * 1.8) {
+                ctx.save();
+                ctx.globalCompositeOperation = 'lighter';
+                ctx.fillStyle = 'rgba(110,255,140,0.35)';
+                const gs = Math.max(3, p.sz * z * 2.2);
+                ctx.fillRect(x - gs / 2, y - gs / 2, gs, gs);
+                ctx.restore();
+                break;
+              }
+            }
+          }
           ctx.fillStyle = p.col;
           ctx.globalAlpha = 1 - f;
           ctx.fillRect(x, y, Math.max(1.5, p.sz * z), Math.max(1.5, p.sz * z));
