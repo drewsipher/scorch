@@ -234,6 +234,19 @@ export class Renderer {
           }
           break;
         }
+        case 'buriedFire': {
+          // muffled underground shot: dust bursts from the sand around the tank
+          this.shakeIt(5);
+          for (let i = 0; i < 14; i++) {
+            this.particles.push({
+              kind: 'puff', x: e.x + (Math.random() - 0.5) * 40, y: e.y - Math.random() * 24,
+              vx: (Math.random() - 0.5) * 60, vy: -20 - Math.random() * 40,
+              life: 0.9, t: 0, sz: 2.5 + Math.random() * 2,
+              col: '150,130,105',
+            });
+          }
+          break;
+        }
         case 'chunkHit': {
           this.fxSpark(e.x, e.y, 6, '#ffd24d');
           break;

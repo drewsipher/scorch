@@ -294,7 +294,16 @@ export class Terrain {
   // One deterministic falling-sand step (Noita-style): sand falls up to 4 cells,
   // slides diagonally at ~45deg repose. Scan order is fixed; direction choices
   // hash-based — identical on every lockstep client.
-  stepSand() {
+  // Land any airborne grains (no sideways slides), then stop simulating.
+  // Frozen mid-collapse piles keep their natural lumpy shapes instead of
+  // converging to perfect repose triangles.
+  freezeSand() {
+    let guard = 0;
+    while (guard++ < 500 && this.stepSand(true)) { /* drop-only passes */ }
+    this.active = [];
+  }
+
+  stepSand(fallOnly = false) {
     if (this.active.length === 0) return false;
     this._sandTick++;
     const tick = this._sandTick;
@@ -325,6 +334,7 @@ export class Terrain {
             if (x < minX) minX = x; if (x > maxX) maxX = x;
             if (y < minMovedY) minMovedY = y; if (ny > maxMovedY) maxMovedY = ny;
           } else {
+            if (fallOnly) continue;
             // slide only off steep ledges (2 empty cells below the diagonal):
             // steeper repose, lumpier piles, and far less endless creeping
             const below2 = below + w;

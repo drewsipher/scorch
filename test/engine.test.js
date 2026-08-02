@@ -402,6 +402,54 @@ test('caves and moonscape landscapes generate', () => {
   }
 });
 
+test('in-game sand settle freezes lumpy (no floaters, no full convergence loop)', () => {
+  const m = makeMatch(4321);
+  m.startRound();
+  m.applyAction({ type: 'fire', angle: 70, power: 60, weapon: 'baby_missile' });
+  let g = 0;
+  while (m.phase === 'flight' && g++ < 120000) m.step(SIM_DT);
+  assert(g < 120000, 'flight ends');
+  assert(!m.terrain.settling(), 'sand frozen after the show');
+  // every remaining sand grain must rest on something
+  const t = m.terrain;
+  for (let x = 1; x < t.w - 1; x += 3) {
+    for (let y = 1; y < t.h - 1; y++) {
+      if (t.mask[y * t.w + x] === 2) {
+        assert(t.mask[(y + 1) * t.w + x] !== 0, `floating frozen sand at ${x},${y}`);
+      }
+    }
+  }
+});
+
+test('firing while buried hurts the shooter', () => {
+  const m = makeMatch(6161);
+  m.startRound();
+  const t = m.current;
+  // bury the tank under a fat mound of sand
+  m.terrain.addDirt(t.x | 0, (t.y - 30) | 0, 60);
+  m.terrain.active = [];   // hold the mound still for the test
+  assert(m.terrain.solid(t.x, t.y - 16), 'tank should be buried');
+  const hpBefore = t.hp;
+  m.applyAction({ type: 'fire', angle: 60, power: 50, weapon: 'baby_missile' });
+  assert(t.hp < hpBefore, `buried shot should self-damage (hp ${t.hp})`);
+});
+
+test('digging under a buried tank drops it into the cavity', () => {
+  const m = makeMatch(7272);
+  m.startRound();
+  const t = m.tanks[0];
+  // bury the tank
+  m.terrain.addDirt(t.x | 0, (t.y - 30) | 0, 55);
+  m.terrain.active = [];
+  assert(m.terrain.solid(t.x, t.y - 16), 'tank is buried');
+  const yBefore = t.y;
+  // hollow out a cavity directly beneath its feet
+  m.terrain.carve(t.x | 0, (t.y + 40) | 0, 38);
+  m.terrain.active = [];   // keep the cavity open for the assertion
+  m.tanksFall();
+  assert(t.y > yBefore + 20, `buried tank should drop into the cavity (fell ${t.y - yBefore}px)`);
+});
+
 console.log('full AI matches (10 seeds)');
 for (const seed of [1, 2, 3, 4, 5, 101, 202, 303, 404, 505]) {
   test(`AI battle seed ${seed} completes without hanging`, () => {

@@ -274,9 +274,16 @@ export class Match {
     const v = power * PROJECTILE_SPEED_SCALE;
     const bx = t.x + Math.cos(a) * MUZZLE_LEN;
     const by = t.y - MUZZLE_PIVOT_DY - Math.sin(a) * MUZZLE_LEN;
-    // if barrel tip is buried (tank got dirted), blast a small exit hole
+    // firing while buried blasts an exit hole — and scorches your own hull.
+    // Repeated shots dig you out, at a price.
     if (this.terrain.solid(bx, by)) {
-      this.terrain.carve(bx | 0, by | 0, 9);
+      this.terrain.carve(bx | 0, by | 0, 12);
+      const buriedCenter = this.terrain.solid(t.x, t.y - TANK_HIT_DY);
+      if (buriedCenter) {
+        const selfDmg = clamp(def.dmg * 0.4, 5, 30);
+        this.emit({ type: 'buriedFire', tank: t.index, x: t.x, y: t.y });
+        this.damageTank(t, selfDmg, null);
+      }
     }
     this.spawnProjectile({
       weapon, owner: t.index,
@@ -323,8 +330,8 @@ export class Match {
       // give the pour a moment of screen time, then snap the stragglers home
       this._settleGrace = (this._settleGrace || 0) + dt;
       if (this._settleGrace > 3.2) {
-        let g = 0;
-        while (this.terrain.settling() && g++ < 5000) this.terrain.stepSand();
+        // enough show — land the stragglers and freeze the piles as they lie
+        this.terrain.freezeSand();
         this.tanksFall();
       }
     } else {
@@ -835,10 +842,22 @@ export class Match {
   tanksFall() {
     for (const t of this.tanks) {
       if (!t.alive) continue;
-      const gy = this.terrain.topY(t.x | 0);
-      if (gy > t.y + 1) {
-        const dist = gy - t.y;
-        t.y = gy;
+      // find real support under the tank's feet — not just the column top.
+      // A buried tank must drop when the ground UNDER it is dug away, even
+      // though the mound above it still owns topY. Thin crusts (<6px) over a
+      // hollow can't hold a tank either — it punches through.
+      const x = t.x | 0;
+      const feet = Math.max(0, t.y | 0);
+      let airAt = -1;
+      for (let k = 0; k <= 6; k++) {
+        if (!this.terrain.solid(x, feet + k)) { airAt = feet + k; break; }
+      }
+      if (airAt < 0) continue;   // solidly supported
+      let ny = airAt;
+      while (ny < this.terrain.h - 1 && !this.terrain.solid(x, ny)) ny++;
+      if (ny > t.y + 1) {
+        const dist = ny - t.y;
+        t.y = ny;
         if (dist > FALL_GRACE && this.opt.fallDamage) {
           if ((t.items.parachute || 0) > 0) {
             t.items.parachute--;

@@ -548,6 +548,7 @@ export class Sound {
         case 'shieldDown': this.shieldDown(); break;
         case 'battery': this.battery(); break;
         case 'dirt': this.dirt(); break;
+        case 'buriedFire': this.explosion(0.7, false, 'dust'); break;
         case 'parachute': this.parachute(); break;
         case 'turnStart': this.turn(); break;
         case 'deathBuildup': this.buildupWhine(e.duration); break;
