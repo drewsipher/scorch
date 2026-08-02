@@ -31,11 +31,13 @@ export const WEAPONS = [
   { id: 'hot_napalm', name: 'Hot Napalm', type: 'napalm', blast: 34, dmg: 34, fuel: 110, price: 10000, qty: 2, trail: '#ff7d4d', desc: 'The deluxe barbecue package.' },
   { id: 'roller', name: 'Roller', type: 'roller', blast: 40, dmg: 44, price: 3000, qty: 5, trail: '#9ecbff', desc: 'Rolls downhill seeking company.' },
   { id: 'heavy_roller', name: 'Heavy Roller', type: 'roller', blast: 70, dmg: 76, price: 6750, qty: 2, trail: '#6fa8ff', desc: 'A boulder with a grudge.' },
-  { id: 'digger', name: 'Digger', type: 'digger', blast: 20, dmg: 16, tunnel: 120, price: 2500, qty: 5, trail: '#d6b98c', desc: 'Burrows a tunnel through terrain.' },
-  { id: 'sandhog', name: 'Sandhog', type: 'digger', blast: 30, dmg: 26, tunnel: 220, price: 6750, qty: 2, trail: '#e8cf9e', desc: 'Industrial-grade excavation.' },
-  { id: 'dirt_clod', name: 'Dirt Clod', type: 'dirt', blast: 34, dmg: 0, price: 2500, qty: 5, trail: '#c9a06a', desc: 'Buries enemies in fresh soil.' },
-  { id: 'ton_of_dirt', name: 'Ton of Dirt', type: 'dirt', blast: 68, dmg: 0, price: 6750, qty: 2, trail: '#b98d55', desc: 'An instant hill, delivered ballistically.' },
+  { id: 'digger', name: 'Digger', type: 'digger', blast: 42, dmg: 46, tunnel: 140, price: 2500, qty: 5, trail: '#d6b98c', desc: 'Burrows straight through, then detonates at missile strength.' },
+  { id: 'sandhog', name: 'Sandhog', type: 'digger', blast: 55, dmg: 58, tunnel: 240, price: 6750, qty: 2, trail: '#e8cf9e', desc: 'Industrial-grade excavation with a warhead to match.' },
+  { id: 'dirt_clod', name: 'Dirt Clod', type: 'dirt', blast: 46, dmg: 0, price: 2500, qty: 5, trail: '#c9a06a', desc: 'Buries enemies in fresh soil.' },
+  { id: 'ton_of_dirt', name: 'Ton of Dirt', type: 'dirt', blast: 92, dmg: 0, price: 6750, qty: 2, trail: '#b98d55', desc: 'An instant mountain, delivered ballistically.' },
   { id: 'homing_missile', name: 'Homing Missile', type: 'homing', blast: 40, dmg: 44, price: 10000, qty: 2, trail: '#c0ff4d', desc: 'Steers toward the nearest enemy.' },
+  { id: 'airstrike', name: 'Airstrike', type: 'airstrike', blast: 30, dmg: 34, price: 8000, qty: 2, trail: '#ffe08a', desc: 'Marks the target — four shells scream in from the sky.' },
+  { id: 'bunker_buster', name: 'Bunker Buster', type: 'buster', blast: 58, dmg: 62, tunnel: 55, price: 9000, qty: 2, trail: '#c9d2df', desc: 'Punches deep underground before detonating.' },
 ];
 
 export const ITEMS = [
@@ -70,7 +72,11 @@ export const DEFAULT_OPTIONS = {
   armor: 100,           // max hp
   aiSkill: 1,           // 0.65 chill | 1 normal | 1.45 deadly (divides AI error)
   theme: 'random',      // 'random' or a theme id
+  landscape: 'random',  // random | rolling | mountains | caves | city | moonscape
+  moveMode: 'free',     // free: everyone gets 60px/turn, fuel extends | fuel: fuel only
 };
+
+export const FREE_MOVE_PER_TURN = 60;
 
 export const WIND_RANGES = { none: 0, light: 25, normal: 45, wild: 75 };
 
@@ -83,8 +89,8 @@ export const FOE_TIERS = [
   { missile: 10, roller: 3, napalm: 2, leapfrog: 2 },                                   // 3
   { missile: 10, baby_nuke: 2, roller: 5, napalm: 3, homing_missile: 1 },               // 4
   { missile: 10, baby_nuke: 3, mirv: 2, hot_napalm: 2, heavy_roller: 2, homing_missile: 2 }, // 5
-  { nuke: 1, baby_nuke: 3, mirv: 3, hot_napalm: 2, heavy_roller: 3, homing_missile: 2, funky_bomb: 2 }, // 6
-  { nuke: 2, deaths_head: 1, mirv: 3, baby_nuke: 4, hot_napalm: 3, homing_missile: 3, sandhog: 2 },     // 7
+  { nuke: 1, baby_nuke: 3, mirv: 3, hot_napalm: 2, heavy_roller: 3, homing_missile: 2, funky_bomb: 2, airstrike: 1 }, // 6
+  { nuke: 2, deaths_head: 1, mirv: 3, baby_nuke: 4, hot_napalm: 3, homing_missile: 3, sandhog: 2, airstrike: 2, bunker_buster: 2 }, // 7
 ];
 
 export const CAMPAIGN = [

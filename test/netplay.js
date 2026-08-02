@@ -94,6 +94,25 @@ else {
   if (!sA.tanks.find(t => t.n === 'Bob')) errors.push('Bob not in match');
 }
 
+// live-aim relay: the aiming player's angle should appear on the other client
+{
+  const owner = await A.evaluate(() => window.app.match.tanks[window.app.match.currentIdx].netOwner);
+  const aId = await A.evaluate(() => window.app.net.id);
+  const [setter, watcher] = owner === aId ? [A, B] : [B, A];
+  const isHumanTurn = await setter.evaluate(() => window.app.isLocalHumanTurn());
+  if (isHumanTurn) {
+    await setter.evaluate(() => { window.app.match.current.angle = 123; window.app.match.current.power = 77; });
+    let seen = null;
+    for (let i = 0; i < 20; i++) {
+      seen = await watcher.evaluate(() => Math.round(window.app.match.current.angle));
+      if (seen === 123) break;
+      await sleep(200);
+    }
+    if (seen !== 123) errors.push('live aim not visible to opponent: saw ' + seen);
+    else console.log('live-aim relay OK');
+  }
+}
+
 // play 6 turns: whoever owns the current tank fires; AI turns run on host
 for (let turn = 0; turn < 6; turn++) {
   // wait for aim phase on both

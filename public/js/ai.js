@@ -108,6 +108,8 @@ function pickWeapon(me, target, dist) {
   if (has('deaths_head') && target.hp > 60) return 'deaths_head';
   if (has('nuke') && (target.hp > 55 || targetShielded)) return 'nuke';
   if (has('mirv') && dist > 300) return 'mirv';
+  if (has('airstrike') && dist > 380) return 'airstrike';
+  if (has('bunker_buster') && targetShielded) return 'bunker_buster';
   if (has('homing_missile')) return 'homing_missile';
   if (has('baby_nuke') && target.hp > 35) return 'baby_nuke';
   if (has('hot_napalm') && dist < 500) return 'hot_napalm';
@@ -190,11 +192,11 @@ const SHOP_PLANS = {
   },
   smart: {
     reserve: 5000,
-    list: ['shield', 'parachute', 'battery', 'baby_nuke', 'mirv', 'missile', 'nuke', 'homing_missile', 'heavy_roller', 'hot_napalm'],
+    list: ['shield', 'parachute', 'battery', 'baby_nuke', 'mirv', 'missile', 'nuke', 'homing_missile', 'airstrike', 'heavy_roller', 'hot_napalm'],
   },
   lethal: {
     reserve: 3000,
-    list: ['heavy_shield', 'parachute', 'battery', 'deaths_head', 'mirv', 'nuke', 'homing_missile', 'baby_nuke', 'hot_napalm', 'heavy_roller', 'funky_bomb'],
+    list: ['heavy_shield', 'parachute', 'battery', 'deaths_head', 'mirv', 'nuke', 'homing_missile', 'airstrike', 'bunker_buster', 'baby_nuke', 'hot_napalm', 'heavy_roller', 'funky_bomb'],
   },
 };
 

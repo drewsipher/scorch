@@ -322,6 +322,86 @@ test('options plumb through: ammo, gravity, armor, cash, endless', () => {
   assert.equal(m.tanks[1].cash, cash, '0% interest option respected');
 });
 
+console.log('issue #1 fixes');
+test('digger always detonates at missile strength', () => {
+  for (const seed of [3, 33, 333]) {
+    const m = makeMatch(seed);
+    m.startRound();
+    const t = m.current;
+    t.weapons.digger = 1;
+    m.applyAction({ type: 'fire', angle: 88, power: 35, weapon: 'digger' }); // straight up, digs down where it lands
+    let boom = null, guard = 0;
+    while (m.phase === 'flight' && guard++ < 60000) {
+      m.step(SIM_DT);
+      for (const e of m.drainEvents()) if (e.type === 'explosion' && e.weapon === 'digger') boom = e;
+    }
+    assert(boom, `digger must explode (seed ${seed})`);
+    assert(boom.r >= 42, 'digger blast is missile strength');
+  }
+});
+
+test('stale turn-tagged actions are rejected', () => {
+  const m = makeMatch(51);
+  m.startRound();
+  const cur = m.currentIdx;
+  // action stamped for a different turn must not apply
+  const ok = m.applyAction({ type: 'fire', angle: 45, power: 50, weapon: 'baby_missile', turn: m.turnCount + 1, tk: cur });
+  assert.equal(ok, false, 'future-stamped action rejected');
+  assert.equal(m.phase, 'aim', 'no state change');
+  const ok2 = m.applyAction({ type: 'fire', angle: 45, power: 50, weapon: 'baby_missile', turn: m.turnCount, tk: cur });
+  assert.equal(ok2, true, 'correctly-stamped action applies');
+});
+
+test('city landscape builds metal structures that resist crumbling', () => {
+  const m = new Match({
+    seed: 77, options: { landscape: 'city', rounds: 1 },
+    players: [
+      { name: 'A', kind: 'ai', ai: 'shooter', color: '#f00' },
+      { name: 'B', kind: 'ai', ai: 'shooter', color: '#0f0' },
+    ],
+  });
+  m.startRound();
+  const t = m.terrain;
+  let metal = 0;
+  for (let i = 0; i < t.mask.length; i += 7) if (t.mask[i] === 3) metal++;
+  assert(metal > 100, 'city should contain metal: ' + metal);
+  // blast a building: metal survives sandification (holes stay holes)
+  let bx = -1;
+  for (let x = 100; x < 1700; x++) if (t.topY(x) < 500) { bx = x; break; }
+  assert(bx > 0, 'found a building');
+  const topBefore = t.topY(bx);
+  m.explode(bx, topBefore + 30, 40, 0, 0, null);
+  let g = 0;
+  while (t.settling() && g++ < 5000) t.stepSand();
+  // metal shell may be pierced but the tower should not have crumbled to a pile
+  assert(t.topY(bx + 25) < 620 || t.topY(bx - 25) < 620, 'metal structure largely stands');
+});
+
+test('caves and moonscape landscapes generate', () => {
+  for (const landscape of ['caves', 'moonscape']) {
+    const m = new Match({
+      seed: 99, options: { landscape, rounds: 1 },
+      players: [
+        { name: 'A', kind: 'ai', ai: 'shooter', color: '#f00' },
+        { name: 'B', kind: 'ai', ai: 'shooter', color: '#0f0' },
+      ],
+    });
+    m.startRound();
+    assert(m.terrain.topY(900) > 50 && m.terrain.topY(900) < 900, landscape + ' has a surface');
+    if (landscape === 'caves') {
+      // there should be air pockets beneath the surface somewhere
+      let pockets = 0;
+      for (let x = 100; x < 1700; x += 20) {
+        const top = m.terrain.topY(x);
+        for (let y = top + 30; y < 860; y += 4) {
+          if (!m.terrain.solid(x, y)) { pockets++; break; }
+        }
+      }
+      assert(pockets > 5, 'caves should have caverns, found ' + pockets);
+    }
+  }
+});
+
 console.log('full AI matches (10 seeds)');
 for (const seed of [1, 2, 3, 4, 5, 101, 202, 303, 404, 505]) {
   test(`AI battle seed ${seed} completes without hanging`, () => {

@@ -561,7 +561,7 @@ export class Sound {
     }
     // whistle tracking: only true shells scream — never dirt, drills,
     // canisters, rollers, or flying debris
-    const WHISTLERS = new Set(['shell', 'mirv', 'homing', 'leapfrog', 'funky']);
+    const WHISTLERS = new Set(['shell', 'mirv', 'homing', 'leapfrog', 'funky', 'airstrike', 'buster']);
     let falling = null;
     for (const p of match.projectiles) {
       if (WHISTLERS.has(p.kind) && !p.rolling && !p.digging && p.vy > 160) { falling = p; break; }

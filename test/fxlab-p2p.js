@@ -27,7 +27,7 @@ const lab = await page.evaluate(() => ({
   deathBtns: document.querySelectorAll('#fx-deaths .fx-btn').length,
 }));
 console.log('LAB:', JSON.stringify(lab));
-if (!lab.panel || lab.weaponBtns !== 17 || lab.deathBtns !== 7) errors.push('lab layout wrong: ' + JSON.stringify(lab));
+if (!lab.panel || lab.weaponBtns !== 19 || lab.deathBtns !== 7) errors.push('lab layout wrong: ' + JSON.stringify(lab));
 
 // fire a nuke, check debris chunks fly
 await page.evaluate(() => {

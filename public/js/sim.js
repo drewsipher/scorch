@@ -3,7 +3,7 @@
 // Renderer & sound consume `match.events` (drained each frame) and live state.
 
 import {
-  WORLD_W, WORLD_H, GRAVITY, SIM_DT, PROJECTILE_SPEED_SCALE, TANK_RADIUS,
+  WORLD_W, WORLD_H, GRAVITY, SIM_DT, PROJECTILE_SPEED_SCALE, TANK_RADIUS, FREE_MOVE_PER_TURN,
   TANK_HIT_RX, TANK_HIT_RY, TANK_HIT_DY, MUZZLE_PIVOT_DY, MUZZLE_LEN,
   FALL_DAMAGE_FACTOR, FALL_GRACE, WEAPONS, ITEMS, ECON, THEMES,
   DEFAULT_OPTIONS, WIND_RANGES,
@@ -104,7 +104,7 @@ export class Match {
       this.theme = THEMES.find(t => t.id === sb.theme) || this.theme;
       this.terrain.importRLE(sb.cols);
     } else {
-      this.terrain.generate(this.roundSeed, this.theme);
+      this.terrain.generate(this.roundSeed, this.theme, this.opt.landscape || 'random');
     }
     this.projectiles = [];
     this.napalm = [];
@@ -148,6 +148,7 @@ export class Match {
     }
     this.currentIdx = (this.setup.campaign || this.setup.sandbox) ? 0 : rng.int(0, n - 1);
     this.advanceToLivingPlayer();
+    this.current.moveBudget = this.opt.moveMode === 'free' ? FREE_MOVE_PER_TURN : 0;
     this.phase = 'aim';
     this.emit({ type: 'roundStart', round: this.round, theme: this.theme.id });
     this.emit({ type: 'turnStart', tank: this.currentIdx });
@@ -200,6 +201,7 @@ export class Match {
     do {
       this.currentIdx = (this.currentIdx + 1) % this.tanks.length;
     } while (!this.tanks[this.currentIdx].alive);
+    this.current.moveBudget = this.opt.moveMode === 'free' ? FREE_MOVE_PER_TURN : 0;
     this.phase = 'aim';
     this.emit({ type: 'turnStart', tank: this.currentIdx });
   }
@@ -229,6 +231,10 @@ export class Match {
   applyAction(action) {
     const t = this.current;
     if (this.phase !== 'aim') return false;
+    // lockstep safety: actions are stamped with the turn they belong to
+    if (action.turn !== undefined && (action.turn !== this.turnCount || action.tk !== this.currentIdx)) {
+      return false;
+    }
     switch (action.type) {
       case 'fire': return this.doFire(action);
       case 'battery': {
@@ -348,7 +354,7 @@ export class Match {
       if (p.kind === 'chunk' && p.age > 5) { continue; }
       if (p.kind === 'roller' && p.rolling) {
         dead = this.stepRoller(p, dt);
-      } else if (p.kind === 'digger' && p.digging) {
+      } else if (p.digging) {
         dead = this.stepDigger(p, dt);
       } else {
         // ballistic flight (substep for tunneling prevention)
@@ -463,7 +469,34 @@ export class Match {
         p.dx = p.vx / sp; p.dy = p.vy / sp;
         p.tunnelLeft = def.tunnel;
         p.digSpeed = 220;
+        p.digR = 11;
         return false;
+      }
+      case 'buster': {
+        // punch straight down along the impact vector, then the big one
+        p.digging = true;
+        const sp = Math.max(Math.hypot(p.vx, p.vy), 60);
+        p.dx = p.vx / sp; p.dy = p.vy / sp;
+        p.tunnelLeft = def.tunnel;
+        p.digSpeed = 340;
+        p.digR = 6;
+        return false;
+      }
+      case 'airstrike': {
+        // marker flare pops, then four shells rain in from high above
+        this.explode(p.x, p.y, 12, 6, p.owner, def);
+        const rng = makeRng((this.roundSeed ^ (p.id * 52711)) >>> 0);
+        for (let i = 0; i < 4; i++) {
+          this.spawnProjectile({
+            weapon: 'missile', owner: p.owner,
+            x: clamp(p.x + rng.range(-70, 70) - i * 14, 20, WORLD_W - 20),
+            y: -60 - i * 90,
+            vx: rng.range(-14, 14), vy: 220,
+            kind: 'shell', hasSplit: true, trailColor: '#ffe08a',
+          });
+        }
+        this.emit({ type: 'airstrikeCall', x: p.x, y: p.y });
+        return true;
       }
       case 'napalm': {
         this.spawnNapalm(p, def);
@@ -471,7 +504,9 @@ export class Match {
         return true;
       }
       case 'dirt': {
-        this.terrain.addDirt(p.x | 0, (p.y - def.blast * 0.35) | 0, def.blast);
+        // a proper mound: wide base plus a tall cap of loose earth
+        this.terrain.addDirt(p.x | 0, (p.y - def.blast * 0.3) | 0, def.blast);
+        this.terrain.addDirt(p.x | 0, (p.y - def.blast * 0.95) | 0, (def.blast * 0.6) | 0);
         this.emit({ type: 'dirt', x: p.x, y: p.y, r: def.blast });
         this.tanksFall();
         return true;
@@ -543,25 +578,18 @@ export class Match {
   }
 
   stepDigger(p, dt) {
+    // diggers and busters bore dead straight through anything — dirt, air
+    // pockets, tunnels — and ALWAYS detonate when the bore is spent.
     const def = WEAPON_BY_ID[p.weapon];
     const adv = p.digSpeed * dt;
     p.x += p.dx * adv;
     p.y += p.dy * adv;
     p.tunnelLeft -= adv;
-    this.terrain.carve(p.x | 0, p.y | 0, 11);
+    if (this.terrain.solid(p.x, p.y)) this.terrain.carve(p.x | 0, p.y | 0, p.digR || 11);
     const hit = this.tankAt(p.x, p.y, p.owner, 99);
-    if (hit || p.tunnelLeft <= 0 || p.x < 2 || p.x > WORLD_W - 2 || p.y > WORLD_H - 2) {
+    if (hit || p.tunnelLeft <= 0 || p.x < 2 || p.x > WORLD_W - 2 || p.y > WORLD_H - 2 || p.y < -30) {
       this.explode(p.x, p.y, def.blast, def.dmg, p.owner, def);
       return true;
-    }
-    // probe ahead of the carve radius — the point we just carved is always air
-    const px = p.x + p.dx * 15, py = p.y + p.dy * 15;
-    if (py < 0 || !this.terrain.solid(px, py)) {
-      // burst out of the ground: back to ballistic
-      p.digging = false;
-      p.kind = 'shell';
-      const sp = 240;
-      p.vx = p.dx * sp; p.vy = p.dy * sp;
     }
     return false;
   }

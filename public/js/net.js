@@ -79,6 +79,10 @@ export class Net {
     if (this.active) this.ws.send(JSON.stringify({ t: 'relay', data }));
   }
 
+  kick(id) {
+    if (this.active && this.isHost) this.ws.send(JSON.stringify({ t: 'kick', id }));
+  }
+
   leave() {
     if (this.ws) {
       try { this.ws.close(); } catch (e) { /* already closed */ }
@@ -231,6 +235,15 @@ export class PeerNet {
       for (const [, c] of this.clients) c.send({ t: 'relay', from: this.id, data });
     } else {
       this.conn.send({ t: 'relay', data });
+    }
+  }
+
+  kick(id) {
+    if (!this.isHost) return;
+    const conn = this.clients.get(id);
+    if (conn) {
+      try { conn.close(); } catch { /* gone */ }
+      this.dropClient(conn);
     }
   }
 

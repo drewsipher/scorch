@@ -116,7 +116,10 @@ class App {
       } else if (m === this.match) {
         this.sound.handleEvents(events, m);
       }
-      if (m === this.match) this.processNetQueue();
+      if (m === this.match) {
+        this.processNetQueue();
+        this.broadcastAim(dt);
+      }
       if (!hidden) {
         this.renderer.draw(m, dt, this.ui);
         if (m === this.match && this.state === 'playing') {
@@ -212,8 +215,12 @@ class App {
   }
 
   applyAndRelay(m, action) {
-    m.applyAction(action);
-    if (m === this.match && this.net.active) {
+    // stamp with the turn it belongs to so a stale or double-tapped input can
+    // never be applied to the wrong turn on any client
+    action.turn = m.turnCount;
+    action.tk = m.currentIdx;
+    const ok = m.applyAction(action);
+    if (ok && m === this.match && this.net.active) {
       this.net.relay({ t: 'action', action });
     }
   }
@@ -222,6 +229,8 @@ class App {
   bindInput() {
     window.addEventListener('keydown', (e) => {
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+      // stop Space/Enter from ghost-clicking whatever button was last focused
+      if ((e.code === 'Space' || e.code === 'Enter') && this.match) e.preventDefault();
       this.sound.resume();
       const local = this.isLocalHumanTurn();
       this.held[e.code] = true;
@@ -291,6 +300,21 @@ class App {
     t.power = clamp(Math.hypot(dx, dy) * 0.36, 5, 100);
   }
 
+  broadcastAim(dt) {
+    if (!this.net.active || !this.isLocalHumanTurn()) return;
+    this._aimAcc = (this._aimAcc || 0) + dt;
+    if (this._aimAcc < 0.15) return;
+    this._aimAcc = 0;
+    const t = this.match.current;
+    const snap = `${Math.round(t.angle)}|${Math.round(t.power)}|${t.selectedWeapon}|${Math.round(t.x)}`;
+    if (snap === this._aimLast) return;
+    this._aimLast = snap;
+    this.net.relay({
+      t: 'aim', tank: this.match.currentIdx,
+      angle: t.angle, power: t.power, weapon: t.selectedWeapon, x: t.x,
+    });
+  }
+
   applyHeldInput(dt) {
     const t = this.match.current;
     if (this.match.phase !== 'aim') return;
@@ -304,24 +328,22 @@ class App {
       if (what === 'angle') t.angle = clamp(t.angle + dir * 42 * fine * dt, 2, 178);
       else t.power = clamp(t.power + dir * 30 * fine * dt, 5, 100);
     }
-    // movement
+    // movement: the free per-turn budget drains first, then fuel
     const mv = (this.held.KeyA ? -1 : 0) + (this.held.KeyD ? 1 : 0);
-    if (mv !== 0 && t.fuel > 0) {
+    const avail = (t.moveBudget || 0) + t.fuel;
+    if (mv !== 0 && avail > 0) {
       const speed = 42;
       const step = mv * speed * dt;
       const nx = clamp(t.x + step, TANK_RADIUS, WORLD_W - TANK_RADIUS);
       const ny = this.match.canMoveTo(t, nx);
       if (ny !== null) {
         const cost = Math.abs(nx - t.x);
-        if (t.fuel >= cost) {
-          t.fuel -= cost;
+        if (avail >= cost) {
+          const fromBudget = Math.min(t.moveBudget || 0, cost);
+          t.moveBudget = (t.moveBudget || 0) - fromBudget;
+          t.fuel -= (cost - fromBudget);
           t.x = nx; t.y = ny;
-          this.netPosThrottle = (this.netPosThrottle || 0) + dt;
-          if (this.net.active && this.netPosThrottle > 0.12) {
-            this.netPosThrottle = 0;
-            this.net.relay({ t: 'pos', tank: t.index, x: t.x });
-          }
-        } else t.fuel = 0;
+        }
       }
     }
   }
@@ -412,6 +434,7 @@ class App {
   beginMatch(setup, postInit) {
     this.stopDemo();
     clearTimeout(this.aiTimer);
+    this.netQueue = [];        // stale actions from an old match must never leak in
     this.match = new Match(setup);
     if (postInit) postInit(this.match);
     this.ui.clear();
@@ -775,6 +798,19 @@ class App {
         }
         break;
       }
+      case 'aim': {
+        // live view of the opponent lining up their shot (cosmetic)
+        const m = this.match;
+        if (m && m.phase === 'aim' && m.currentIdx === data.tank && m.tanks[data.tank]) {
+          const t = m.tanks[data.tank];
+          t.angle = data.angle;
+          t.power = data.power;
+          if (t.weapons[data.weapon]) t.selectedWeapon = data.weapon;
+          t.x = data.x;
+          t.y = m.terrain.topY(t.x | 0);
+        }
+        break;
+      }
       // Lockstep-ordered messages: queue and apply only when the local sim
       // reaches the right phase (a lagging tab must not drop or reorder them).
       case 'action': case 'shopDone': case 'nextRound':
@@ -790,8 +826,15 @@ class App {
       const data = this.netQueue[0];
       if (data.t === 'action') {
         if (m.phase !== 'aim') return; // wait for local flight to finish
+        const a = data.action;
+        if (a.turn !== undefined && a.turn < m.turnCount) {
+          // stale echo from a turn that already resolved — discard
+          this.netQueue.shift();
+          continue;
+        }
+        if (a.turn !== undefined && a.turn > m.turnCount) return; // we're behind; wait
         this.netQueue.shift();
-        m.applyAction(data.action);
+        m.applyAction(a);
       } else if (data.t === 'shopDone') {
         if (!this.roundSettled) return; // interest must be applied first
         this.netQueue.shift();
@@ -830,12 +873,21 @@ class App {
 
   async joinGame(code, name, onErr) {
     if (!code || code.length !== 4) { onErr('Enter the 4-letter room code.'); return; }
+    if (this._joining) return;               // no double-joins from double-clicks
+    this._joining = true;
     try {
       await this.net.join(code, name);
       this.ui.showWaiting(code);
     } catch (err) {
+      this.net.leave();
       onErr(err.message);
+    } finally {
+      this._joining = false;
     }
+  }
+
+  kickPeer(id) {
+    if (this.net.active && this.net.isHost && this.net.kick) this.net.kick(id);
   }
 
   leaveNet() {

@@ -2,7 +2,7 @@
 // Renders through the main Renderer with a lightweight stand-in "match".
 
 import { WORLD_W, WORLD_H, THEMES, AI_TYPES, WEAPONS, ITEMS } from './config.js';
-import { Terrain } from './terrain.js';
+import { Terrain, ROCK, SAND, METAL } from './terrain.js';
 import { ICONS } from './sprites.js';
 import { hashSeed, clamp, TAU } from './utils.js';
 
@@ -95,7 +95,7 @@ export class Editor {
   paintIfDown() {
     if (!this.mouse.down || !this.mouse.over) return;
     const { wx, wy } = this.mouse;
-    if (this.tool === 'draw') this.terrain.paintRock(wx, wy, this.brush);
+    if (this.tool === 'draw') this.terrain.paintMat(wx, wy, this.brush, this.material ?? ROCK);
     else if (this.tool === 'erase') this.terrain.carve(wx | 0, wy | 0, this.brush);
   }
 
@@ -238,10 +238,19 @@ export class Editor {
     this.brushSlider.oninput = (e) => { this.brush = +e.target.value; $('ed-brush-val').textContent = this.brush; };
     $('ed-brush-val').textContent = this.brush;
 
-    this.panel.querySelectorAll('.ed-tool').forEach(b => {
+    this.material = ROCK;
+    this.panel.querySelectorAll('#ed-mats .ed-tool').forEach(b => {
+      b.onclick = () => {
+        this.material = parseInt(b.dataset.m, 10);
+        this.tool = 'draw';
+        this.panel.querySelectorAll('#ed-mats .ed-tool').forEach(x => x.classList.toggle('active', x === b));
+        this.panel.querySelectorAll('.ed-tools:not(#ed-mats) .ed-tool, [data-tool]').forEach(x => x.classList.toggle('active', x.dataset.tool === 'draw'));
+      };
+    });
+    this.panel.querySelectorAll('[data-tool]').forEach(b => {
       b.onclick = () => {
         this.tool = b.dataset.tool;
-        this.panel.querySelectorAll('.ed-tool').forEach(x => x.classList.toggle('active', x === b));
+        this.panel.querySelectorAll('[data-tool]').forEach(x => x.classList.toggle('active', x === b));
         if (this.tool !== 'spawn') this.selSpawn = -1;
         this.renderSpawnList();
       };

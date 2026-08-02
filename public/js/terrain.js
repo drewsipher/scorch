@@ -6,7 +6,7 @@ import { WORLD_W, WORLD_H } from './config.js';
 import { makeRng, makeNoise1D, hexToRgb, lerp, clamp } from './utils.js';
 
 // mask cell values
-export const AIR = 0, ROCK = 1, SAND = 2;
+export const AIR = 0, ROCK = 1, SAND = 2, METAL = 3;
 
 export class Terrain {
   constructor() {
@@ -48,14 +48,21 @@ export class Terrain {
   }
 
   // ---- Generation ----
-  generate(seed, theme) {
+  generate(seed, theme, style = 'random') {
     const rng = makeRng(seed);
     const noise = makeNoise1D(rng, 5);
+    this.themeSeed = seed;
+    this.theme = theme;
+    if (style === 'city') { this.genCity(rng); return; }
+
     const styleRoll = rng();
-    // Terrain styles: rolling, mountains, valley, mesa
-    let base = this.h * 0.62;       // y of average surface (lower y = higher terrain)
+    const base = this.h * 0.62;     // y of average surface (lower y = higher terrain)
     let amp, freq;
-    if (styleRoll < 0.3) { amp = 120; freq = 0.004; }          // rolling
+    if (style === 'rolling') { amp = 120; freq = 0.004; }
+    else if (style === 'mountains') { amp = 260; freq = 0.006; }
+    else if (style === 'caves') { amp = 240; freq = 0.005; }
+    else if (style === 'moonscape') { amp = 70; freq = 0.0045; }
+    else if (styleRoll < 0.3) { amp = 120; freq = 0.004; }     // rolling
     else if (styleRoll < 0.6) { amp = 260; freq = 0.006; }     // mountains
     else if (styleRoll < 0.8) { amp = 190; freq = 0.0035; }    // sweeping
     else { amp = 90; freq = 0.008; }                            // choppy lowland
@@ -75,8 +82,58 @@ export class Terrain {
       for (let y = topY; y < this.h; y++) this.mask[y * this.w + x] = ROCK;
     }
     this.recalcTop(0, this.w - 1);
-    this.themeSeed = seed;
-    this.theme = theme;
+
+    if (style === 'caves') {
+      // organic cavern systems: random-walk chains of carved blobs
+      const caves = rng.int(7, 11);
+      for (let c = 0; c < caves; c++) {
+        let cx = rng.int(100, this.w - 100);
+        let cy = rng.int(Math.min(this.topY(cx) + 80, this.h - 120), this.h - 70);
+        const steps = rng.int(4, 11);
+        for (let st = 0; st < steps; st++) {
+          this.carve(cx, cy, rng.int(18, 44));
+          cx = clamp(cx + rng.int(-70, 70), 60, this.w - 60);
+          cy = clamp(cy + rng.int(-45, 45), this.topY(cx) + 50, this.h - 50);
+        }
+      }
+    } else if (style === 'moonscape') {
+      // pockmarked craters with raised rock rims
+      const craters = rng.int(6, 10);
+      for (let c = 0; c < craters; c++) {
+        const cx = rng.int(90, this.w - 90);
+        const r = rng.int(28, 85);
+        const cy = this.topY(cx) + (r * 0.25 | 0);
+        this.paintMat(cx - r, this.topY(clamp(cx - r, 0, this.w - 1)) - 4, (r * 0.22) | 0, ROCK);
+        this.paintMat(cx + r, this.topY(clamp(cx + r, 0, this.w - 1)) - 4, (r * 0.22) | 0, ROCK);
+        this.carve(cx, cy, r);
+      }
+    }
+  }
+
+  // Flat city block: buildings of rock with metal shells (and a few solid
+  // steel towers) that shrug off blasts and keep their holes.
+  genCity(rng) {
+    this.mask.fill(0);
+    const gy = (this.h * 0.74) | 0;
+    for (let x = 0; x < this.w; x++) {
+      for (let y = gy; y < this.h; y++) this.mask[y * this.w + x] = ROCK;
+    }
+    let x = rng.int(50, 120);
+    while (x < this.w - 200) {
+      const bw = rng.int(70, 150);
+      const bh = rng.int(100, 330);
+      if (rng() < 0.8) {
+        const solidSteel = rng() < 0.3;
+        for (let xx = x; xx < x + bw; xx++) {
+          for (let yy = gy - bh; yy < gy; yy++) {
+            const shell = xx < x + 5 || xx >= x + bw - 5 || yy < gy - bh + 8;
+            this.mask[yy * this.w + xx] = (solidSteel || shell) ? METAL : ROCK;
+          }
+        }
+      }
+      x += bw + rng.int(50, 130);
+    }
+    this.recalcTop(0, this.w - 1);
   }
 
   // ---- Mutation ----
@@ -133,8 +190,8 @@ export class Terrain {
   }
 
   // ---- Sandbox editor support ----
-  // Paint solid rock in a circle (no sand activation — editor terrain is static).
-  paintRock(cx, cy, r) {
+  // Paint a circle of any material (no sand activation — editor terrain is static).
+  paintMat(cx, cy, r, mat = ROCK) {
     cx |= 0; cy |= 0; r |= 0;
     const x0 = clamp(cx - r, 0, this.w - 1), x1 = clamp(cx + r, 0, this.w - 1);
     const y0 = clamp(cy - r, 0, this.h - 1), y1 = clamp(cy + r, 0, this.h - 1);
@@ -144,24 +201,28 @@ export class Terrain {
       const row = y * this.w;
       for (let x = x0; x <= x1; x++) {
         const dx = x - cx;
-        if (dx * dx + dy * dy <= r2) this.mask[row + x] = ROCK;
+        if (dx * dx + dy * dy <= r2) this.mask[row + x] = mat;
       }
     }
     this.recalcTop(x0, x1);
     this.markDirty(x0, 0, x1);
   }
 
-  // Column run-length encoding: compact enough for localStorage maps.
+  paintRock(cx, cy, r) { this.paintMat(cx, cy, r, ROCK); }
+
+  // Column run-length encoding (material-aware): runs of [start, len] for rock
+  // or [start, len, material]. Compact enough for localStorage maps.
   exportRLE() {
     const cols = [];
     for (let x = 0; x < this.w; x++) {
       const runs = [];
       let y = 0;
       while (y < this.h) {
-        if (this.mask[y * this.w + x] !== AIR) {
+        const mat = this.mask[y * this.w + x];
+        if (mat !== AIR) {
           const start = y;
-          while (y < this.h && this.mask[y * this.w + x] !== AIR) y++;
-          runs.push([start, y - start]);
+          while (y < this.h && this.mask[y * this.w + x] === mat) y++;
+          runs.push(mat === ROCK ? [start, y - start] : [start, y - start, mat]);
         } else y++;
       }
       cols.push(runs);
@@ -173,9 +234,11 @@ export class Terrain {
     this.mask.fill(AIR);
     const n = Math.min(cols.length, this.w);
     for (let x = 0; x < n; x++) {
-      for (const [s, l] of cols[x]) {
+      for (const run of cols[x]) {
+        const [s, l] = run;
+        const mat = run[2] ?? ROCK;
         const end = Math.min(s + l, this.h);
-        for (let y = Math.max(0, s); y < end; y++) this.mask[y * this.w + x] = ROCK;
+        for (let y = Math.max(0, s); y < end; y++) this.mask[y * this.w + x] = mat;
       }
     }
     this.recalcTop(0, this.w - 1);
@@ -428,6 +491,13 @@ export class Terrain {
             rd[ri] = Math.min(255, td[ti] * 1.05 + 5);
             rd[ri + 1] = Math.min(255, td[ti + 1] * 1.04 + 4);
             rd[ri + 2] = Math.min(255, td[ti + 2] + 2);
+          } else if (v === METAL) {
+            // desaturated steel with faint horizontal plating bands
+            const avg = (td[ti] + td[ti + 1] + td[ti + 2]) / 3;
+            const band = (y & 15) < 2 ? 22 : 0;
+            rd[ri] = Math.min(255, avg * 0.55 + 58 + band);
+            rd[ri + 1] = Math.min(255, avg * 0.6 + 64 + band);
+            rd[ri + 2] = Math.min(255, avg * 0.7 + 76 + band);
           } else {
             rd[ri] = td[ti]; rd[ri + 1] = td[ti + 1]; rd[ri + 2] = td[ti + 2];
           }
@@ -450,12 +520,14 @@ export class Terrain {
         if (s && inAir) {
           // crust only on the true surface or on rock ceilings (tunnels) —
           // buried sand pockets stay plain so no stray dark lines appear
-          if (y !== this.top[gx] && this.mask[y * this.w + gx] !== ROCK) {
+          if (y !== this.top[gx] && this.mask[y * this.w + gx] !== ROCK && this.mask[y * this.w + gx] !== METAL) {
             inAir = false;
             continue;
           }
+          const runMetal = this.mask[y * this.w + gx] === METAL;
           for (let k = 0; k < 8 && y + k < this.h; k++) {
             if (this.mask[(y + k) * this.w + gx] === AIR) break;
+            if (runMetal && k >= 2) break;   // steel: dark edge only, no soil crust
             const ri = ((y + k) * wSpan + x) * 4;
             if (k < 2) {           // outline
               rd[ri] = 16; rd[ri + 1] = 18; rd[ri + 2] = 28;

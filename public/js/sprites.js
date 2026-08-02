@@ -305,6 +305,24 @@ export function buildIcon(id) {
       rect(g, 5, 6, 4, 4, '#e8e8e8');
       px(g, 6, 7, '#c83d3d'); px(g, 7, 8, '#c83d3d');
       break;
+    case 'airstrike':
+      // target flare: beacon with radiating marks
+      disc(g, 7, 8, 2.2, '#ffd24d');
+      px(g, 7, 4, '#ff9c40'); px(g, 7, 3, '#ffe08a');
+      px(g, 3, 8, '#ff9c40'); px(g, 2, 8, '#ffe08a');
+      px(g, 11, 8, '#ff9c40'); px(g, 12, 8, '#ffe08a');
+      px(g, 4, 5, '#ff9c40'); px(g, 10, 5, '#ff9c40');
+      rect(g, 6, 10, 3, 2, '#8a92a3');
+      break;
+    case 'bunker_buster':
+      // long heavy penetrator dart pointing right
+      rect(g, 1, 6, 9, 3, '#8a92a3');
+      rect(g, 3, 6, 3, 3, '#5a6273');
+      px(g, 10, 6, '#c9d2df'); px(g, 10, 7, '#e8e8e8'); px(g, 10, 8, '#c9d2df');
+      px(g, 11, 7, '#ffffff'); px(g, 12, 7, '#e8e8e8');
+      px(g, 1, 5, '#5a6273'); px(g, 0, 5, '#5a6273');
+      px(g, 1, 9, '#5a6273'); px(g, 0, 9, '#5a6273');
+      break;
     default:
       disc(g, 7, 7, 4, '#8a92a3');
   }

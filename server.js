@@ -92,6 +92,13 @@ wss.on('connection', (ws) => {
         }
         break;
       }
+      case 'kick': {
+        const room = rooms.get(ws.room);
+        if (!room || ws.id !== room.hostId) return;
+        const target = room.clients.get(msg.id);
+        if (target) target.ws.close();
+        break;
+      }
     }
   });
 

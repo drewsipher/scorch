@@ -16,6 +16,8 @@ const OPTION_DEFS = [
   { key: 'armor', label: 'Armor', choices: [[75, '75'], [100, '100'], [150, '150'], [200, '200']] },
   { key: 'aiSkill', label: 'AI Skill', choices: [[0.65, 'Chill'], [1, 'Normal'], [1.45, 'Deadly']] },
   { key: 'theme', label: 'World', choices: [['random', 'Random'], ...THEMES.map(t => [t.id, t.name])] },
+  { key: 'landscape', label: 'Landscape', choices: [['random', 'Random'], ['rolling', 'Rolling'], ['mountains', 'Mountains'], ['caves', 'Caves'], ['city', 'City Ruins'], ['moonscape', 'Moonscape']] },
+  { key: 'moveMode', label: 'Movement', choices: [['free', 'Free 60/turn'], ['fuel', 'Fuel only']] },
 ];
 import { WEAPON_BY_ID, ITEM_BY_ID } from './sim.js';
 import { formatMoney, clamp } from './utils.js';
@@ -86,11 +88,16 @@ export class UI {
     $('hud-hp').innerHTML = `HP <b>${Math.max(0, Math.round(t.hp))}</b>`;
     $('hud-cash').textContent = formatMoney(t.cash);
     const fuelEl = $('hud-fuel');
-    fuelEl.classList.toggle('hidden', t.fuel <= 0);
-    fuelEl.innerHTML = `⛽ <b>${Math.floor(t.fuel)}</b>`;
-    $('round-label').textContent = match.roundsTotal >= 999
+    const budget = Math.floor(t.moveBudget || 0);
+    const showMove = budget > 0 || t.fuel > 0;
+    fuelEl.classList.toggle('hidden', !showMove);
+    fuelEl.innerHTML = budget > 0
+      ? `🥾 <b>${budget}</b>${t.fuel > 0 ? ` ⛽ <b>${Math.floor(t.fuel)}</b>` : ''}`
+      : `⛽ <b>${Math.floor(t.fuel)}</b>`;
+    const gravBadge = match.gravity === 60 ? ' · 🌙 LOW-G' : match.gravity === 200 ? ' · 🪨 HI-G' : '';
+    $('round-label').textContent = (match.roundsTotal >= 999
       ? `ROUND ${match.round}`
-      : `ROUND ${match.round}/${match.roundsTotal}`;
+      : `ROUND ${match.round}/${match.roundsTotal}`) + gravBadge;
     // wind
     const w = match.wind;
     this.drawWindsock(w, performance.now() / 1000);
@@ -404,6 +411,10 @@ export class UI {
     lob.innerHTML = '';
     peers.forEach(p => {
       const row = el('div', 'player-row', `<span>🔗 ${p.name}</span><span style="color:var(--ok)">connected</span>`);
+      const kick = el('button', 'row-del', '✕');
+      kick.title = 'Kick';
+      kick.onclick = () => { this.app.sound.click(); this.app.kickPeer(p.id); };
+      row.append(kick);
       lob.append(row);
     });
   }
@@ -424,12 +435,16 @@ export class UI {
     const back = el('button', 'big-btn', '← Back');
     back.onclick = () => { this.app.sound.click(); this.app.leaveNet(); this.showMenu(); };
     const join = el('button', 'big-btn primary', 'JOIN');
-    join.onclick = () => {
+    join.onclick = async () => {
       const nm = name.value.trim() || 'Challenger';
       localStorage.setItem('scorch_name', nm);
       this.app.sound.click();
       err.textContent = '';
-      this.app.joinGame(code.value.trim().toUpperCase(), nm, (msg) => { err.textContent = msg; });
+      join.disabled = true;
+      join.textContent = 'CONNECTING…';
+      await this.app.joinGame(code.value.trim().toUpperCase(), nm, (msg) => { err.textContent = msg; });
+      join.disabled = false;
+      join.textContent = 'JOIN';
     };
     code.addEventListener('keydown', e => { if (e.key === 'Enter') join.click(); });
     row.append(back, join);

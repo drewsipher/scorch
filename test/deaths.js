@@ -27,7 +27,7 @@ await page.evaluate(() => {
 await sleep(400);
 await page.screenshot({ path: `${SHOTS}/50-setup-options.png` });
 const optCount = await page.evaluate(() => document.querySelectorAll('.opt-cell').length);
-if (optCount !== 12) errors.push(`expected 12 option cells, got ${optCount}`);
+if (optCount !== 14) errors.push(`expected 14 option cells, got ${optCount}`);
 
 // start with no wind + infinite ammo to verify options reach the sim
 await page.evaluate(() => {
