@@ -116,12 +116,17 @@ export class Match {
     this.turnCount = 0;
     this.roundResults = null;
 
-    // place tanks: sandbox maps pin exact spawns; otherwise spaced slots, shuffled
+    // place tanks: sandbox maps pin exact spawns (optionally inside caves);
+    // otherwise spaced slots, shuffled
     const n = this.tanks.length;
     let slots = [];
+    const spawnYs = [];
     if (sb && sb.spawns) {
       for (let i = 0; i < n; i++) {
-        slots.push(clamp(sb.spawns[i] ?? (200 + i * 280), 50, WORLD_W - 50));
+        const sp = sb.spawns[i];
+        const sx = (typeof sp === 'number' ? sp : sp && sp.x) ?? (200 + i * 280);
+        slots.push(clamp(sx, 50, WORLD_W - 50));
+        spawnYs.push(typeof sp === 'object' && sp && sp.y != null ? sp.y | 0 : null);
       }
     } else {
       for (let i = 0; i < n; i++) {
@@ -139,8 +144,16 @@ export class Match {
       t.alive = true;
       t.shieldHp = 0;
       t.x = slots[i];
-      this.flattenPad(t.x);
-      t.y = this.terrain.topY(t.x | 0);
+      const sy = spawnYs[i];
+      if (sy != null && !this.terrain.solid(t.x, sy)) {
+        // cave spawn: stand on the first floor beneath the marked point
+        let ny = Math.max(0, sy);
+        while (ny < this.terrain.h - 1 && !this.terrain.solid(t.x, ny)) ny++;
+        t.y = ny;
+      } else {
+        this.flattenPad(t.x);
+        t.y = this.terrain.topY(t.x | 0);
+      }
       t.aiMemory = {};
       t.lastDamager = null;
       t.hangTime = 0;

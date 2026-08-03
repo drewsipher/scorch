@@ -92,6 +92,34 @@ export class Editor {
     return [wx * z + (r.vw / 2 - r.cam.x * z), wy * z + (r.vh / 2 - r.cam.y * z)];
   }
 
+  // Resolve a drop point: air -> stand on the first floor below (cave floors
+  // included); solid ground -> snap to the open surface. Never buried.
+  resolveSpawnPos(x, yRaw) {
+    const t = this.terrain;
+    const xi = clamp(x | 0, 50, WORLD_W - 50);
+    const surface = t.topY(xi);
+    if (yRaw == null) return { x: xi, y: surface, cave: false };
+    const yi = clamp(yRaw | 0, 10, WORLD_H - 10);
+    if (t.solid(xi, yi)) return { x: xi, y: surface, cave: false };
+    let ny = yi;
+    while (ny < t.h - 1 && !t.solid(xi, ny)) ny++;
+    return { x: xi, y: ny, cave: ny > surface + 4 };
+  }
+
+  spawnAt(i) {
+    const sp = this.map.spawns[i];
+    return this.resolveSpawnPos(sp.x, sp.y ?? null);
+  }
+
+  placeSpawn(i, wx, wy) {
+    const r = this.resolveSpawnPos(wx, wy);
+    const sp = this.map.spawns[i];
+    sp.x = r.x;
+    // remember the air point just above the cave floor, so re-resolving
+    // scans down to the same floor instead of reading "buried"
+    sp.y = r.cave ? r.y - 8 : null;
+  }
+
   paintIfDown() {
     if (!this.mouse.down || !this.mouse.over) return;
     const { wx, wy } = this.mouse;
@@ -105,8 +133,8 @@ export class Editor {
     const z = r.cam.zoom;
     // spawn ghosts
     this.map.spawns.forEach((sp, i) => {
-      const x = clamp(sp.x, 50, WORLD_W - 50);
-      const y = this.terrain.topY(x | 0);
+      const pos = this.spawnAt(i);
+      const x = pos.x, y = pos.y;
       const [sx, sy] = this.worldToScreen(x, y);
       const color = sp.role === 'player' ? '#ff5c5c' : ENEMY_COLORS[(i - 1) % ENEMY_COLORS.length];
       const spr = r.tankSprite(color);
@@ -120,7 +148,7 @@ export class Editor {
       ctx.font = `${Math.max(9 * r.dpr, 10 * z) | 0}px "Press Start 2P", monospace`;
       ctx.textAlign = 'center';
       ctx.fillStyle = 'rgba(6,8,14,0.7)';
-      const label = sp.role === 'player' ? 'YOU' : `E${i}`;
+      const label = (sp.role === 'player' ? 'YOU' : `E${i}`) + (pos.cave ? ' ⛏' : '');
       const tw = ctx.measureText(label).width;
       ctx.fillRect(sx - tw / 2 - 3, sy - 58 * z, tw + 6, 13 * r.dpr);
       ctx.fillStyle = this.selSpawn === i ? '#ffd24d' : '#f2f4f8';
@@ -157,8 +185,21 @@ export class Editor {
     this._down = (e) => {
       if (e.target !== canvas) return;
       const [wx, wy] = this.screenToWorld(e.clientX, e.clientY);
+      // grab a spawn ghost under the cursor (any tool) and start dragging it
+      const grabbed = this.map.spawns.findIndex((sp, i) => {
+        const r = this.spawnAt(i);
+        return Math.abs(wx - r.x) < 44 && wy > r.y - 60 && wy < r.y + 14;
+      });
+      if (grabbed >= 0) {
+        this.selSpawn = grabbed;
+        this.dragSpawn = grabbed;
+        this.tool = 'spawn';
+        this.panel.querySelectorAll('[data-tool]').forEach(x => x.classList.toggle('active', x.dataset.tool === 'spawn'));
+        this.renderSpawnList();
+        return;
+      }
       if (this.tool === 'spawn' && this.selSpawn >= 0) {
-        this.map.spawns[this.selSpawn].x = clamp(wx, 50, WORLD_W - 50);
+        this.placeSpawn(this.selSpawn, wx, wy);
         this.renderSpawnList();
         return;
       }
@@ -168,8 +209,12 @@ export class Editor {
     this._move = (e) => {
       const [wx, wy] = this.screenToWorld(e.clientX, e.clientY);
       Object.assign(this.mouse, { wx, wy, over: e.target === canvas });
+      if (this.dragSpawn != null) this.placeSpawn(this.dragSpawn, wx, wy);
     };
-    this._up = () => { this.mouse.down = false; };
+    this._up = () => {
+      this.mouse.down = false;
+      this.dragSpawn = null;
+    };
     this._wheel = (e) => {
       if (e.target !== canvas || !this.open) return;
       e.preventDefault();

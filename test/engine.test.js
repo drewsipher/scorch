@@ -600,6 +600,30 @@ test('random landscape occasionally rolls the exotic generators', () => {
   assert(sawCavern, 'random should sometimes produce caves/craters');
 });
 
+test('sandbox cave spawns place tanks on the cave floor, not the surface', () => {
+  // flat ground with a cave carved into it
+  const gy = 600;
+  const cols = [];
+  for (let x = 0; x < WORLD_W; x++) cols.push([[gy, WORLD_H - gy]]);
+  const m = new Match({
+    seed: 12, options: { rounds: 1, windMode: 'none' },
+    players: [
+      { name: 'A', kind: 'human', ai: null, color: '#f00' },
+      { name: 'B', kind: 'ai', ai: 'shooter', color: '#0f0' },
+    ],
+    sandbox: { cols, theme: 'rust_storm', spawns: [{ x: 300, y: null }, { x: 900, y: 700 }] },
+  });
+  // pre-carve a cave at 900 before the round uses it: carve after import via startRound? we
+  // instead punch the cave into the RLE: rebuild cols with a gap at 850-950, y 660..760
+  for (let x = 850; x < 950; x++) cols[x] = [[gy, 60], [760, WORLD_H - 760]];
+  m.startRound();
+  const a = m.tanks[0], b = m.tanks[1];
+  assert(Math.abs(a.y - m.terrain.topY(300)) < 2, 'surface spawn stands on the surface');
+  assert.equal(b.y, 760, 'cave spawn stands on the cave floor');
+  assert(b.y > m.terrain.topY(900), 'cave spawn is below the surface');
+  assert(!m.terrain.solid(b.x, b.y - 12), 'cave spawn is not buried');
+});
+
 console.log('full AI matches (10 seeds)');
 for (const seed of [1, 2, 3, 4, 5, 101, 202, 303, 404, 505]) {
   test(`AI battle seed ${seed} completes without hanging`, () => {
