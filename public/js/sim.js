@@ -101,10 +101,11 @@ export class Match {
     this.theme = (this.opt.theme !== 'random' && THEMES.find(t => t.id === this.opt.theme)) || themePick;
     this.terrain = new Terrain();
     const sb = this.setup.sandbox;
-    if (sb) {
+    if (sb && sb.cols) {
       this.theme = THEMES.find(t => t.id === sb.theme) || this.theme;
       this.terrain.importRLE(sb.cols);
     } else {
+      if (sb && sb.theme) this.theme = THEMES.find(t => t.id === sb.theme) || this.theme;
       this.terrain.generate(this.roundSeed, this.theme, this.opt.landscape || 'random');
     }
     this.projectiles = [];

@@ -210,8 +210,16 @@ export class Editor {
       <label class="ed-row"><span class="lbl">BRUSH ${' '}<span id="ed-brush-val"></span></span>
         <input id="ed-brush" type="range" min="8" max="90" step="2"></label>
       <div class="ed-row ed-gen">
-        <button id="ed-random" class="mini-wide">🎲 Random terrain</button>
-        <button id="ed-flat" class="mini-wide">▂ Flat ground</button>
+        <select id="ed-landscape">
+          <option value="random">Any landscape</option>
+          <option value="rolling">Rolling</option>
+          <option value="mountains">Mountains</option>
+          <option value="caves">Caves</option>
+          <option value="city">City Ruins</option>
+          <option value="moonscape">Moonscape</option>
+        </select>
+        <button id="ed-random" class="mini-wide">🎲 Generate</button>
+        <button id="ed-flat" class="mini-wide">▂ Flat</button>
       </div>
       <div class="ed-row"><span class="lbl">COMBATANTS ${' '}<span class="ed-dim">(select, then click map to move)</span></span></div>
       <div id="ed-spawns"></div>
@@ -258,7 +266,7 @@ export class Editor {
 
     $('ed-random').onclick = () => {
       this.map.seed = (Math.random() * 0xffffffff) >>> 0;
-      this.terrain.generate(this.map.seed, this.themeDef());
+      this.terrain.generate(this.map.seed, this.themeDef(), $('ed-landscape').value);
       this.refreshGfx();
     };
     $('ed-flat').onclick = () => {

@@ -53,6 +53,13 @@ export class Terrain {
     const noise = makeNoise1D(rng, 5);
     this.themeSeed = seed;
     this.theme = theme;
+    if (style === 'random') {
+      // random worlds roll the exotic landscapes too
+      const roll = rng();
+      if (roll < 0.10) style = 'caves';
+      else if (roll < 0.18) style = 'city';
+      else if (roll < 0.26) style = 'moonscape';
+    }
     if (style === 'city') { this.genCity(rng); return; }
 
     const styleRoll = rng();

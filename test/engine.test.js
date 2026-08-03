@@ -545,7 +545,14 @@ test('homing missile locks reliably from across the map', () => {
   let hits = 0;
   const N = 12;
   for (let i = 0; i < N; i++) {
-    const m = makeMatch(3000 + i);
+    // open rolling field, no wind: measure guidance, not terrain luck
+    const m = new Match({
+      seed: 3000 + i, options: { rounds: 2, landscape: 'rolling', windMode: 'none' },
+      players: [
+        { name: 'A', kind: 'ai', ai: 'shooter', color: '#f00' },
+        { name: 'B', kind: 'ai', ai: 'shooter', color: '#0f0' },
+      ],
+    });
     m.startRound();
     const shooter = m.current;
     const target = m.tanks[(m.currentIdx + 1) % 2];
@@ -572,6 +579,25 @@ test('sidewinder corkscrews and bursts into shrapnel', () => {
     maxShrap = Math.max(maxShrap, m.projectiles.filter(p => p.shrap).length);
   }
   assert(maxShrap >= 10, `shrapnel storm expected (saw ${maxShrap})`);
+});
+
+test('random landscape occasionally rolls the exotic generators', () => {
+  let sawMetal = false, sawCavern = false;
+  for (let seed = 0; seed < 90 && !(sawMetal && sawCavern); seed++) {
+    const t = new Terrain();
+    t.generate(seed * 977 + 5, {}, 'random');
+    for (let i = 0; i < t.mask.length && !sawMetal; i += 11) {
+      if (t.mask[i] === 3) sawMetal = true;
+    }
+    for (let x = 200; x < 1600 && !sawCavern; x += 40) {
+      const top = t.topY(x);
+      for (let y = top + 40; y < 850; y += 6) {
+        if (!t.solid(x, y)) { sawCavern = true; break; }
+      }
+    }
+  }
+  assert(sawMetal, 'random should sometimes produce city metal');
+  assert(sawCavern, 'random should sometimes produce caves/craters');
 });
 
 console.log('full AI matches (10 seeds)');

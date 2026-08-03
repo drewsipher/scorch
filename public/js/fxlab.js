@@ -27,19 +27,23 @@ export class FxLab {
     return cols;
   }
 
-  start(themeId = 'rust_storm') {
+  start(themeId = 'rust_storm', landscape = 'flat') {
     const app = this.app;
     app.stopDemo();
     app.campaign = null;
     app.sandboxMap = null;
+    this.landscape = landscape;
     const setup = {
       seed: 424242,
-      options: { rounds: 999, windMode: 'none', shop: false, theme: themeId },
+      options: { rounds: 999, windMode: 'none', shop: false, theme: themeId, landscape: landscape === 'flat' ? 'random' : landscape },
       players: [
         { name: 'Dummy', kind: 'human', ai: null, color: '#4dc9ff' },
         { name: 'Observer', kind: 'human', ai: null, color: '#ff5c5c' },
       ],
-      sandbox: { cols: this.flatCols(), theme: themeId, spawns: [IMPACT_X, 1500] },
+      sandbox: {
+        cols: landscape === 'flat' ? this.flatCols() : null,
+        theme: themeId, spawns: [IMPACT_X, 1500],
+      },
     };
     app.match = new Match(setup);
     app.match.checkRoundOver = () => false;   // nobody wins in the lab
@@ -100,7 +104,10 @@ export class FxLab {
 
   resetGround() {
     const m = this.m();
-    m.terrain.importRLE(this.flatCols());
+    if (this.landscape && this.landscape !== 'flat') {
+      m.terrain.generate(424242, m.theme, this.landscape);
+      m.terrain.attachGfx(m.theme, m.roundSeed);
+    } else m.terrain.importRLE(this.flatCols());
     m.terrain.markDirty(0, 0, WORLD_W - 1);
     m.projectiles = [];
     m.napalm = [];
@@ -128,6 +135,16 @@ export class FxLab {
       <div class="ed-row"><span class="lbl">WORLD</span>
         <select id="fx-theme">${THEMES.map(t => `<option value="${t.id}">${t.name}</option>`).join('')}</select>
       </div>
+      <div class="ed-row"><span class="lbl">LANDSCAPE</span>
+        <select id="fx-land">
+          <option value="flat">Flat range</option>
+          <option value="rolling">Rolling</option>
+          <option value="mountains">Mountains</option>
+          <option value="caves">Caves</option>
+          <option value="city">City Ruins</option>
+          <option value="moonscape">Moonscape</option>
+        </select>
+      </div>
       <div class="ed-row"><span class="lbl">WEAPON IMPACTS</span></div>
       <div class="fx-grid" id="fx-weapons"></div>
       <div class="ed-row"><span class="lbl">TANK DEATHS</span></div>
@@ -140,10 +157,16 @@ export class FxLab {
     document.body.append(this.panel);
     const $ = (q) => this.panel.querySelector(q);
 
-    $('#fx-theme').value = 'rust_storm';
+    $('#fx-theme').value = this.themeId || 'rust_storm';
     $('#fx-theme').onchange = (e) => {
+      this.themeId = e.target.value;
       this.panel.remove();
-      this.start(e.target.value);
+      this.start(this.themeId, this.landscape || 'flat');
+    };
+    $('#fx-land').value = this.landscape || 'flat';
+    $('#fx-land').onchange = (e) => {
+      this.panel.remove();
+      this.start(this.themeId || 'rust_storm', e.target.value);
     };
 
     this.panel.querySelectorAll('#fx-speed .ed-tool').forEach(b => {
