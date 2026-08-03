@@ -104,6 +104,7 @@ export class Match {
     if (sb && sb.cols) {
       this.theme = THEMES.find(t => t.id === sb.theme) || this.theme;
       this.terrain.importRLE(sb.cols);
+      if (sb.props) this.terrain.importProps(sb.props);
     } else {
       if (sb && sb.theme) this.theme = THEMES.find(t => t.id === sb.theme) || this.theme;
       this.terrain.generate(this.roundSeed, this.theme, this.opt.landscape || 'random');

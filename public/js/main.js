@@ -501,7 +501,7 @@ class App {
     const setup = {
       seed: (Math.random() * 0xffffffff) >>> 0,
       options, players,
-      sandbox: { cols: map.cols, theme: map.theme, spawns: map.spawns.map(sp => ({ x: sp.x, y: sp.y ?? null })) },
+      sandbox: { cols: map.cols, theme: map.theme, props: map.props || [], spawns: map.spawns.map(sp => ({ x: sp.x, y: sp.y ?? null })) },
     };
     this.beginMatch(setup, (m) => {
       // hand out the loadouts drawn up in the editor

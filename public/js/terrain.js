@@ -4,6 +4,7 @@
 
 import { WORLD_W, WORLD_H } from './config.js';
 import { makeRng, makeNoise1D, hexToRgb, lerp, clamp } from './utils.js';
+import { CITY_BUILDINGS, decodeProp } from './assets/city_buildings.js';
 
 // mask cell values
 export const AIR = 0, ROCK = 1, SAND = 2, METAL = 3;
@@ -20,6 +21,7 @@ export class Terrain {
     this.dirtyRects = [];
     this.active = [];                            // sand ranges being simulated [{x0,x1,quiet}]
     this._sandTick = 0;
+    this.props = [];                             // stamped art props [{def,x,y}] for texture painting
   }
 
   solid(x, y) {
@@ -53,6 +55,7 @@ export class Terrain {
     const noise = makeNoise1D(rng, 5);
     this.themeSeed = seed;
     this.theme = theme;
+    this.props = [];
     if (style === 'random') {
       // random worlds roll the exotic landscapes too
       const roll = rng();
@@ -117,30 +120,74 @@ export class Terrain {
     }
   }
 
-  // Flat city block: buildings of rock with metal shells (and a few solid
-  // steel towers) that shrug off blasts and keep their holes.
+  // Flat city block. With imported art available, stamp real ruined-building
+  // sprites (brick -> rock, steel frame -> metal, facade art baked into the
+  // texture). Falls back to blocky rock/steel towers without assets.
   genCity(rng) {
     this.mask.fill(0);
+    this.props = [];
     const gy = (this.h * 0.74) | 0;
     for (let x = 0; x < this.w; x++) {
       for (let y = gy; y < this.h; y++) this.mask[y * this.w + x] = ROCK;
     }
-    let x = rng.int(50, 120);
-    while (x < this.w - 200) {
-      const bw = rng.int(70, 150);
-      const bh = rng.int(100, 330);
-      if (rng() < 0.8) {
-        const solidSteel = rng() < 0.3;
-        for (let xx = x; xx < x + bw; xx++) {
-          for (let yy = gy - bh; yy < gy; yy++) {
-            const shell = xx < x + 5 || xx >= x + bw - 5 || yy < gy - bh + 8;
-            this.mask[yy * this.w + xx] = (solidSteel || shell) ? METAL : ROCK;
-          }
+    if (CITY_BUILDINGS && CITY_BUILDINGS.length) {
+      let x = rng.int(40, 120);
+      while (x < this.w - 200) {
+        const def = CITY_BUILDINGS[rng.int(0, CITY_BUILDINGS.length - 1)];
+        if (rng() < 0.85 && x + def.w < this.w - 50) {
+          this.stampProp(def, x, gy);
+          x += def.w + rng.int(60, 160);
+        } else {
+          x += rng.int(140, 280);
         }
       }
-      x += bw + rng.int(50, 130);
+    } else {
+      let x = rng.int(50, 120);
+      while (x < this.w - 200) {
+        const bw = rng.int(70, 150);
+        const bh = rng.int(100, 330);
+        if (rng() < 0.8) {
+          const solidSteel = rng() < 0.3;
+          for (let xx = x; xx < x + bw; xx++) {
+            for (let yy = gy - bh; yy < gy; yy++) {
+              const shell = xx < x + 5 || xx >= x + bw - 5 || yy < gy - bh + 8;
+              this.mask[yy * this.w + xx] = (solidSteel || shell) ? METAL : ROCK;
+            }
+          }
+        }
+        x += bw + rng.int(50, 130);
+      }
     }
     this.recalcTop(0, this.w - 1);
+  }
+
+  // Stamp a prop's material mask into the world; art is painted at attachGfx.
+  stampProp(def, x, groundY) {
+    const dec = decodeProp(def);
+    const y0 = groundY - dec.h;
+    for (let py = 0; py < dec.h; py++) {
+      const wy = y0 + py;
+      if (wy < 0 || wy >= this.h) continue;
+      for (let px = 0; px < dec.w; px++) {
+        const m = dec.mats[py * dec.w + px];
+        if (!m) continue;
+        const wx = x + px;
+        if (wx < 0 || wx >= this.w) continue;
+        this.mask[wy * this.w + wx] = m;
+      }
+    }
+    this.props.push({ def, x, y: y0 });
+  }
+
+  // Reattach saved props (sandbox maps store {i,x,y} refs)
+  importProps(refs) {
+    this.props = (refs || [])
+      .filter(r => CITY_BUILDINGS[r.i])
+      .map(r => ({ def: CITY_BUILDINGS[r.i], x: r.x, y: r.y }));
+  }
+
+  exportProps() {
+    return this.props.map(p => ({ i: CITY_BUILDINGS.indexOf(p.def), x: p.x, y: p.y }));
   }
 
   // ---- Mutation ----
@@ -239,6 +286,7 @@ export class Terrain {
 
   importRLE(cols) {
     this.mask.fill(AIR);
+    this.props = [];
     const n = Math.min(cols.length, this.w);
     for (let x = 0; x < n; x++) {
       for (const run of cols[x]) {
@@ -442,8 +490,32 @@ export class Terrain {
     this.canvas.height = this.h;
     this.ctx = this.canvas.getContext('2d');
     this.buildTexture(theme, seed);
+    this.paintProps();
     this.redrawColumns(0, this.w - 1);
     this.dirtyRects = [];
+  }
+
+  // bake stamped prop art (building facades) into the strata texture
+  paintProps() {
+    if (!this.texture || !this.props.length) return;
+    const td = this.texture.data;
+    for (const prop of this.props) {
+      const dec = decodeProp(prop.def);
+      for (let py = 0; py < dec.h; py++) {
+        const wy = prop.y + py;
+        if (wy < 0 || wy >= this.h) continue;
+        for (let px = 0; px < dec.w; px++) {
+          if (!dec.mats[py * dec.w + px]) continue;
+          const wx = prop.x + px;
+          if (wx < 0 || wx >= this.w) continue;
+          const c = dec.colors[py * dec.w + px];
+          const ti = (wy * this.w + wx) * 4;
+          td[ti] = (c >> 16) & 255;
+          td[ti + 1] = (c >> 8) & 255;
+          td[ti + 2] = c & 255;
+        }
+      }
+    }
   }
 
   buildTexture(theme, seed) {

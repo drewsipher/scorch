@@ -41,8 +41,10 @@ export class Editor {
     this.open = true;
     this.map = map ? JSON.parse(JSON.stringify(map)) : this.newMap();
     this.terrain = new Terrain();
-    if (this.map.cols) this.terrain.importRLE(this.map.cols);
-    else this.terrain.generate(this.map.seed, this.themeDef());
+    if (this.map.cols) {
+      this.terrain.importRLE(this.map.cols);
+      this.terrain.importProps(this.map.props);
+    } else this.terrain.generate(this.map.seed, this.themeDef());
     this.refreshGfx();
     this.stand = {
       phase: 'aim', projectiles: [], napalm: [], dying: [], tanks: [],
@@ -357,7 +359,11 @@ export class Editor {
   }
 
   snapshot() {
-    return { ...JSON.parse(JSON.stringify(this.map)), cols: this.terrain.exportRLE() };
+    return {
+      ...JSON.parse(JSON.stringify(this.map)),
+      cols: this.terrain.exportRLE(),
+      props: this.terrain.exportProps(),
+    };
   }
 
   readMaps() {
