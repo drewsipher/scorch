@@ -4,6 +4,36 @@
 import { WORLD_W, WORLD_H, THEMES, AI_TYPES, WEAPONS, ITEMS } from './config.js';
 import { Terrain, ROCK, SAND, METAL } from './terrain.js';
 import { ICONS } from './sprites.js';
+import { PROP_SETS, decodeProp } from './assets/index.js';
+
+// flat list of every placeable prop with display names
+const PROP_LIST = [];
+for (const [set, arr] of Object.entries(PROP_SETS)) {
+  arr.forEach((def, i) => PROP_LIST.push({ set, i, def, label: def.name || `${set} ${i + 1}` }));
+}
+
+const propThumbCache = new Map();
+function propThumb(def) {
+  let url = propThumbCache.get(def);
+  if (url) return url;
+  const dec = decodeProp(def);
+  const cv = document.createElement('canvas');
+  cv.width = dec.w; cv.height = dec.h;
+  const cx = cv.getContext('2d');
+  const im = cx.createImageData(dec.w, dec.h);
+  for (let i = 0; i < dec.mats.length; i++) {
+    if (!dec.mats[i]) continue;
+    const c = dec.colors[i], o = i * 4;
+    im.data[o] = (c >> 16) & 255;
+    im.data[o + 1] = (c >> 8) & 255;
+    im.data[o + 2] = c & 255;
+    im.data[o + 3] = 255;
+  }
+  cx.putImageData(im, 0, 0);
+  url = cv.toDataURL();
+  propThumbCache.set(def, url);
+  return url;
+}
 import { hashSeed, clamp, TAU } from './utils.js';
 
 const EDIT_ITEMS = ITEMS.filter(i => i.id !== 'fuel');
@@ -166,6 +196,22 @@ export class Editor {
       }
       ctx.restore();
     });
+    // prop ghost at the cursor
+    if (this.mouse.over && this.tool === 'props') {
+      const entry = PROP_LIST[this.propSel];
+      if (entry) {
+        const rp = this.resolveSpawnPos(this.mouse.wx, this.mouse.wy);
+        const [sx, sy] = this.worldToScreen(rp.x, rp.y);
+        const z = this.app.renderer.cam.zoom;
+        const img = new Image();
+        img.src = propThumb(entry.def);   // cached data URL decodes instantly
+        ctx.save();
+        ctx.imageSmoothingEnabled = false;
+        ctx.globalAlpha = 0.6;
+        ctx.drawImage(img, sx - entry.def.w * z / 2, sy - entry.def.h * z, entry.def.w * z, entry.def.h * z);
+        ctx.restore();
+      }
+    }
     // brush cursor
     if (this.mouse.over && (this.tool === 'draw' || this.tool === 'erase')) {
       const [sx, sy] = this.worldToScreen(this.mouse.wx, this.mouse.wy);
@@ -203,6 +249,15 @@ export class Editor {
       if (this.tool === 'spawn' && this.selSpawn >= 0) {
         this.placeSpawn(this.selSpawn, wx, wy);
         this.renderSpawnList();
+        return;
+      }
+      if (this.tool === 'props') {
+        const entry = PROP_LIST[this.propSel];
+        if (entry) {
+          const r = this.resolveSpawnPos(wx, wy);
+          const left = clamp((r.x - entry.def.w / 2) | 0, 0, WORLD_W - entry.def.w);
+          this.terrain.stampPropLive(entry.def, left, r.y);
+        }
         return;
       }
       this.mouse.down = true;
@@ -252,6 +307,7 @@ export class Editor {
           <button data-tool="draw" class="ed-tool active">✏ Draw</button>
           <button data-tool="erase" class="ed-tool">⌫ Erase</button>
           <button data-tool="spawn" class="ed-tool">⚑ Spawns</button>
+          <button data-tool="props" class="ed-tool">🏚 Props</button>
         </div>
       </div>
       <label class="ed-row"><span class="lbl">BRUSH ${' '}<span id="ed-brush-val"></span></span>
@@ -267,6 +323,10 @@ export class Editor {
         </select>
         <button id="ed-random" class="mini-wide">🎲 Generate</button>
         <button id="ed-flat" class="mini-wide">▂ Flat</button>
+      </div>
+      <div class="ed-row ed-props-row hidden" id="ed-props-row">
+        <span class="lbl">PROPS ${' '}<span class="ed-dim">(click the map to place)</span></span>
+        <div id="ed-props" class="ed-prop-palette"></div>
       </div>
       <div class="ed-row"><span class="lbl">COMBATANTS ${' '}<span class="ed-dim">(select, then click map to move)</span></span></div>
       <div id="ed-spawns"></div>
@@ -293,6 +353,21 @@ export class Editor {
     this.brushSlider.oninput = (e) => { this.brush = +e.target.value; $('ed-brush-val').textContent = this.brush; };
     $('ed-brush-val').textContent = this.brush;
 
+    this.propSel = 0;
+    const propBox = this.panel.querySelector('#ed-props');
+    PROP_LIST.forEach((entry, i) => {
+      const b = el('button', 'ed-prop-btn' + (i === 0 ? ' selected' : ''));
+      const img = el('img');
+      img.src = propThumb(entry.def);
+      b.title = entry.label;
+      b.append(img);
+      b.onclick = () => {
+        this.propSel = i;
+        propBox.querySelectorAll('.ed-prop-btn').forEach((x, k) => x.classList.toggle('selected', k === i));
+      };
+      propBox.append(b);
+    });
+
     this.material = ROCK;
     this.panel.querySelectorAll('#ed-mats .ed-tool').forEach(b => {
       b.onclick = () => {
@@ -306,6 +381,7 @@ export class Editor {
       b.onclick = () => {
         this.tool = b.dataset.tool;
         this.panel.querySelectorAll('[data-tool]').forEach(x => x.classList.toggle('active', x === b));
+        this.panel.querySelector('#ed-props-row').classList.toggle('hidden', this.tool !== 'props');
         if (this.tool !== 'spawn') this.selSpawn = -1;
         this.renderSpawnList();
       };

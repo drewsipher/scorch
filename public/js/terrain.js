@@ -4,7 +4,7 @@
 
 import { WORLD_W, WORLD_H } from './config.js';
 import { makeRng, makeNoise1D, hexToRgb, lerp, clamp } from './utils.js';
-import { CITY_BUILDINGS, decodeProp } from './assets/city_buildings.js';
+import { PROP_SETS, getProp, findPropRef, decodeProp } from './assets/index.js';
 
 // mask cell values
 export const AIR = 0, ROCK = 1, SAND = 2, METAL = 3;
@@ -130,10 +130,11 @@ export class Terrain {
     for (let x = 0; x < this.w; x++) {
       for (let y = gy; y < this.h; y++) this.mask[y * this.w + x] = ROCK;
     }
-    if (CITY_BUILDINGS && CITY_BUILDINGS.length) {
+    const cityPool = [...PROP_SETS.city, ...PROP_SETS.clean];
+    if (cityPool.length) {
       let x = rng.int(40, 120);
       while (x < this.w - 200) {
-        const def = CITY_BUILDINGS[rng.int(0, CITY_BUILDINGS.length - 1)];
+        const def = cityPool[rng.int(0, cityPool.length - 1)];
         if (rng() < 0.85 && x + def.w < this.w - 50) {
           this.stampProp(def, x, gy);
           x += def.w + rng.int(60, 160);
@@ -176,18 +177,30 @@ export class Terrain {
         this.mask[wy * this.w + wx] = m;
       }
     }
+    this.recalcTop(Math.max(0, x - 1), Math.min(this.w - 1, x + dec.w + 1));
     this.props.push({ def, x, y: y0 });
   }
 
-  // Reattach saved props (sandbox maps store {i,x,y} refs)
+  // Reattach saved props (sandbox maps store {set,i,x,y} refs; legacy refs
+  // without a set default to the ruined-city collection)
   importProps(refs) {
     this.props = (refs || [])
-      .filter(r => CITY_BUILDINGS[r.i])
-      .map(r => ({ def: CITY_BUILDINGS[r.i], x: r.x, y: r.y }));
+      .map(r => ({ def: getProp(r), x: r.x, y: r.y }))
+      .filter(p => p.def);
   }
 
   exportProps() {
-    return this.props.map(p => ({ i: CITY_BUILDINGS.indexOf(p.def), x: p.x, y: p.y }));
+    return this.props
+      .map(p => ({ ...(findPropRef(p.def) || {}), x: p.x, y: p.y }))
+      .filter(r => r.set !== undefined);
+  }
+
+  // live-stamp for the editor: mask + immediate texture paint
+  stampPropLive(def, x, groundY) {
+    this.stampProp(def, x, groundY);
+    const prop = this.props[this.props.length - 1];
+    if (this.texture) this.paintOneProp(prop);
+    this.markDirty(Math.max(0, prop.x - 2), 0, Math.min(this.w - 1, prop.x + def.w + 2));
   }
 
   // ---- Mutation ----
@@ -498,22 +511,25 @@ export class Terrain {
   // bake stamped prop art (building facades) into the strata texture
   paintProps() {
     if (!this.texture || !this.props.length) return;
+    for (const prop of this.props) this.paintOneProp(prop);
+  }
+
+  paintOneProp(prop) {
+    if (!this.texture) return;
     const td = this.texture.data;
-    for (const prop of this.props) {
-      const dec = decodeProp(prop.def);
-      for (let py = 0; py < dec.h; py++) {
-        const wy = prop.y + py;
-        if (wy < 0 || wy >= this.h) continue;
-        for (let px = 0; px < dec.w; px++) {
-          if (!dec.mats[py * dec.w + px]) continue;
-          const wx = prop.x + px;
-          if (wx < 0 || wx >= this.w) continue;
-          const c = dec.colors[py * dec.w + px];
-          const ti = (wy * this.w + wx) * 4;
-          td[ti] = (c >> 16) & 255;
-          td[ti + 1] = (c >> 8) & 255;
-          td[ti + 2] = c & 255;
-        }
+    const dec = decodeProp(prop.def);
+    for (let py = 0; py < dec.h; py++) {
+      const wy = prop.y + py;
+      if (wy < 0 || wy >= this.h) continue;
+      for (let px = 0; px < dec.w; px++) {
+        if (!dec.mats[py * dec.w + px]) continue;
+        const wx = prop.x + px;
+        if (wx < 0 || wx >= this.w) continue;
+        const c = dec.colors[py * dec.w + px];
+        const ti = (wy * this.w + wx) * 4;
+        td[ti] = (c >> 16) & 255;
+        td[ti + 1] = (c >> 8) & 255;
+        td[ti + 2] = c & 255;
       }
     }
   }

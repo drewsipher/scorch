@@ -436,3 +436,15 @@ input.code-input {
 }
 .fx-btn:hover { background: rgba(110,231,255,0.12); border-color: var(--accent2); }
 .fx-btn img { image-rendering: pixelated; width: 22px; height: 22px; flex-shrink: 0; }
+
+.ed-prop-palette {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px;
+  max-height: 150px; overflow-y: auto;
+}
+.ed-prop-btn {
+  background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 7px; padding: 3px; cursor: pointer; height: 56px;
+  display: flex; align-items: flex-end; justify-content: center;
+}
+.ed-prop-btn img { image-rendering: pixelated; max-width: 100%; max-height: 48px; }
+.ed-prop-btn.selected { border-color: var(--accent); background: rgba(255,180,94,0.14); }
