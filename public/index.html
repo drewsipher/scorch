@@ -27,8 +27,8 @@
     </div>
     <div id="hud-round" class="hud-panel">
       <span id="round-label">ROUND 1/5</span>
-      <button id="btn-sound" class="icon-btn" title="Sound">🔊</button>
-      <button id="btn-music" class="icon-btn" title="Music">🎵</button>
+      <button id="btn-sound" class="icon-btn" title="Sound"></button>
+      <button id="btn-music" class="icon-btn" title="Music"></button>
     </div>
   </div>
 
@@ -60,13 +60,18 @@
       <div id="power-bar"><div id="power-fill"></div></div>
     </div>
     <div class="hud-panel" id="action-panel">
-      <button id="btn-battery" class="hud-btn" title="Use battery (B)">🔋<span id="bat-count"></span></button>
+      <button id="btn-battery" class="hud-btn" title="Use battery (B)"><span id="bat-count"></span></button>
       <button id="btn-fire" class="fire-btn">FIRE</button>
     </div>
   </div>
   <div id="turn-banner" class="hidden"></div>
   <div id="taunt" class="hidden"></div>
   <div id="help-hint">←→ angle · ↑↓ power · Tab weapon · A/D move · Space fire · drag to aim</div>
+</div>
+
+<div id="chat-box" class="hidden">
+  <div id="chat-log"></div>
+  <input id="chat-input" class="hidden" type="text" maxlength="120" placeholder="message… (Enter to send, Esc to close)">
 </div>
 
 <div id="overlay"></div>

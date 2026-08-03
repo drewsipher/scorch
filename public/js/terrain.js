@@ -22,6 +22,21 @@ export class Terrain {
     this.active = [];                            // sand ranges being simulated [{x0,x1,quiet}]
     this._sandTick = 0;
     this.props = [];                             // stamped art props [{def,x,y}] for texture painting
+    this.sandColor = null;                       // per-grain 0xRRGGBB carried by moving sand (render-only)
+  }
+
+  ensureSandColor() {
+    if (!this.sandColor) this.sandColor = new Uint32Array(this.w * this.h);
+    return this.sandColor;
+  }
+
+  // capture the texture color of a cell that just became loose sand, so the
+  // grain keeps its look (building bricks stay brick-colored as they pour)
+  captureSandColor(i) {
+    if (!this.texture) return;
+    const sc = this.ensureSandColor();
+    const t = i * 4, td = this.texture.data;
+    sc[i] = (td[t] << 16) | (td[t + 1] << 8) | td[t + 2];
   }
 
   solid(x, y) {
@@ -250,7 +265,10 @@ export class Terrain {
       const row = y * this.w;
       for (let x = x0; x <= x1; x++) {
         const dx = x - cx;
-        if (dx * dx + dy * dy <= r2 && this.mask[row + x] === ROCK) this.mask[row + x] = SAND;
+        if (dx * dx + dy * dy <= r2 && this.mask[row + x] === ROCK) {
+          this.mask[row + x] = SAND;
+          this.captureSandColor(row + x);
+        }
       }
     }
     this.activate(x0 - 4, x1 + 4, Math.max(0, y0 - 10), this.h - 1);
@@ -323,7 +341,10 @@ export class Terrain {
       const top = this.topY(x);
       if (top < minTop) minTop = top;
       for (let y = top; y < Math.min(cy, this.h); y++) {
-        if (this.mask[y * this.w + x] === ROCK) this.mask[y * this.w + x] = SAND;
+        if (this.mask[y * this.w + x] === ROCK) {
+          this.mask[y * this.w + x] = SAND;
+          this.captureSandColor(y * this.w + x);
+        }
       }
     }
     this.activate(x0 - 4, x1 + 4, Math.max(0, minTop - 10), this.h - 1);
@@ -365,6 +386,7 @@ export class Terrain {
           let n = 0;
           while (yy >= 0 && m[yy * w + x] === ROCK && n++ < 36) {
             m[yy * w + x] = SAND;
+            this.captureSandColor(yy * w + x);
             yy--;
           }
           touched = true;
@@ -413,6 +435,10 @@ export class Terrain {
             while (d < 4 && ny + 1 < h && m[(ny + 1) * w + x] === AIR) { ny++; d++; }
             m[ny * w + x] = SAND;
             m[row + x] = AIR;
+            if (this.sandColor) {
+              this.sandColor[ny * w + x] = this.sandColor[row + x];
+              this.sandColor[row + x] = 0;
+            }
             moved = true;
             if (x < minX) minX = x; if (x > maxX) maxX = x;
             if (y < minMovedY) minMovedY = y; if (ny > maxMovedY) maxMovedY = ny;
@@ -439,6 +465,10 @@ export class Terrain {
             while (d < 4 && ny + 1 < h && m[(ny + 1) * w + nx] === AIR) { ny++; d++; }
             m[ny * w + nx] = SAND;
             m[row + x] = AIR;
+            if (this.sandColor) {
+              this.sandColor[ny * w + nx] = this.sandColor[row + x];
+              this.sandColor[row + x] = 0;
+            }
             moved = true;
             if (nx < minX) minX = nx; if (nx > maxX) maxX = nx;
             if (x < minX) minX = x; if (x > maxX) maxX = x;
@@ -607,10 +637,18 @@ export class Terrain {
         if (v !== AIR) {
           const ti = (rowM + gx) * 4;
           if (v === SAND) {
-            // loose sand reads just barely lighter than bedrock
-            rd[ri] = Math.min(255, td[ti] * 1.05 + 5);
-            rd[ri + 1] = Math.min(255, td[ti + 1] * 1.04 + 4);
-            rd[ri + 2] = Math.min(255, td[ti + 2] + 2);
+            const cc = this.sandColor ? this.sandColor[rowM + gx] : 0;
+            if (cc) {
+              // crumbled material keeps its source color (building debris!)
+              rd[ri] = (cc >> 16) & 255;
+              rd[ri + 1] = (cc >> 8) & 255;
+              rd[ri + 2] = cc & 255;
+            } else {
+              // loose sand reads just barely lighter than bedrock
+              rd[ri] = Math.min(255, td[ti] * 1.05 + 5);
+              rd[ri + 1] = Math.min(255, td[ti + 1] * 1.04 + 4);
+              rd[ri + 2] = Math.min(255, td[ti + 2] + 2);
+            }
           } else if (v === METAL) {
             // desaturated steel with faint horizontal plating bands
             const avg = (td[ti] + td[ti + 1] + td[ti + 2]) / 3;

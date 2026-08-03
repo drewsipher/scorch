@@ -448,3 +448,56 @@ input.code-input {
 }
 .ed-prop-btn img { image-rendering: pixelated; max-width: 100%; max-height: 48px; }
 .ed-prop-btn.selected { border-color: var(--accent); background: rgba(255,180,94,0.14); }
+
+.shop-sort { display: flex; gap: 7px; align-items: center; margin: 8px 0 2px; }
+.sort-btn {
+  background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.14);
+  color: var(--dim); font-family: inherit; font-size: 13px; font-weight: 600;
+  padding: 4px 12px; border-radius: 6px; cursor: pointer;
+}
+.sort-btn.active { color: var(--accent); border-color: var(--accent); }
+
+/* ---------- multiplayer chat ---------- */
+#chat-box {
+  position: fixed; left: 14px; bottom: 100px; z-index: 6;
+  width: min(360px, 40vw); pointer-events: none;
+}
+#chat-log { display: flex; flex-direction: column; gap: 3px; margin-bottom: 6px; }
+.chat-line {
+  background: rgba(10,14,26,0.78); border-left: 3px solid var(--accent2);
+  border-radius: 4px; padding: 4px 9px; font-size: 13px;
+  animation: chatIn 0.15s ease;
+  transition: opacity 1s;
+}
+.chat-line b { margin-right: 6px; }
+@keyframes chatIn { from { opacity: 0; transform: translateX(-8px); } }
+#chat-input {
+  pointer-events: auto; width: 100%;
+  background: rgba(10,14,26,0.92); border: 1px solid var(--accent2);
+  color: var(--txt); font-family: inherit; font-size: 14px;
+  padding: 7px 10px; border-radius: 7px; outline: none;
+}
+
+/* ---------- de-emoji pixel UI ---------- */
+.btn-icon {
+  image-rendering: pixelated; width: 20px; height: 20px;
+  vertical-align: -4px; margin-right: 8px;
+}
+.icon-btn .btn-icon { margin-right: 0; width: 18px; height: 18px; vertical-align: -3px; }
+.ed-tool .btn-icon { width: 15px; height: 15px; margin-right: 4px; vertical-align: -3px; }
+.bot-chip {
+  font-family: 'Press Start 2P', monospace; font-size: 8px;
+  background: rgba(110,231,255,0.16); color: var(--accent2);
+  border: 1px solid rgba(110,231,255,0.4); border-radius: 4px;
+  padding: 2px 5px; margin-left: 8px; vertical-align: 2px;
+}
+.mat-swatch {
+  display: inline-block; width: 12px; height: 12px;
+  border: 1px solid rgba(0,0,0,0.5); margin-right: 5px; vertical-align: -2px;
+}
+h2, h3 { font-family: 'Press Start 2P', 'Rajdhani', monospace; }
+h2 { font-size: 17px; line-height: 1.5; }
+h3 { font-size: 11px; }
+.big-btn, .fire-btn { border-radius: 6px; }
+.hud-panel, .screen { border-radius: 8px; }
+.camp-ico .btn-icon { margin-right: 0; }

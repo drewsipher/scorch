@@ -32,6 +32,7 @@ export class Renderer {
     this.tankSprites = new Map();   // color hex -> {frames, ...}
     this.windStreaks = [];
     this.puffTimers = new Map();    // projectile id -> last puff emit time
+    this.bubbles = [];              // speech bubbles [{tank, text, t, life}]
     this.resize();
     window.addEventListener('resize', () => this.resize());
   }
@@ -195,7 +196,7 @@ export class Renderer {
           this.setTheme(match.theme, match.roundSeed);
           if (match.terrain && !match.terrain.canvas) match.terrain.attachGfx(match.theme, match.roundSeed);
           break;
-        case 'explosion': this.fxExplosion(e.x, e.y, e.r, e.nuke, e.weapon); break;
+        case 'explosion': this.fxExplosion(e.x, e.y, e.r, e.nuke, e.weapon, match); break;
         case 'fire': this.fxMuzzle(match.tanks[e.tank]); break;
         case 'mirvSplit': this.fxSpark(e.x, e.y, 14, '#ffffff'); break;
         case 'dirt': this.fxDirt(e.x, e.y, e.r); break;
@@ -300,7 +301,98 @@ export class Renderer {
 
   shakeIt(mag) { this.shake = Math.max(this.shake, mag); }
 
-  fxExplosion(x, y, r, nuke, weaponId) {
+  // speech bubble anchored to a tank (replaces the centered toast for chatter)
+  say(tankIdx, text) {
+    // one bubble per tank at a time; newest wins
+    this.bubbles = this.bubbles.filter(b => b.tank !== tankIdx);
+    this.bubbles.push({ tank: tankIdx, text: String(text).slice(0, 60), t: 0, life: 2.8 });
+  }
+
+  drawOffscreenArrows(ctx, match, w2s, z) {
+    for (const p of match.projectiles) {
+      if (p.kind === 'beam' || p.kind === 'nukeball' || p.rolling || p.digging) continue;
+      const [sx, sy] = w2s(p.x, p.y);
+      if (sy >= -6) continue;   // on screen (or nearly)
+      const u = Math.max(2, Math.round(2.5 * this.dpr));   // pixel unit
+      const x = Math.round(clamp(sx, 20 * this.dpr, this.vw - 20 * this.dpr) / u) * u;
+      const col = p.trailColor || '#ffffff';
+      // chunky pixel chevron, stacked rows, pointing up
+      ctx.save();
+      const rows = [[0, 1], [-1, 3], [-2, 5], [-1, 3, true], [-1, 3, true]];
+      let yy = 6 * this.dpr;
+      ctx.fillStyle = col;
+      for (const [off, w2, dim] of rows) {
+        ctx.globalAlpha = dim ? 0.5 : 1;
+        ctx.fillRect(x + off * u, yy, w2 * u, u);
+        yy += u;
+      }
+      // altitude tick: how far above (small bar length)
+      const alt = Math.min((-sy) / (300 * this.dpr), 1);
+      ctx.globalAlpha = 0.8;
+      ctx.fillStyle = 'rgba(255,255,255,0.7)';
+      ctx.fillRect(x - 2 * u, yy + u, Math.max(u, Math.round(4 * u * (1 - alt))) , Math.max(2, u / 2));
+      ctx.restore();
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  drawBubbles(ctx, match, w2s, z, dt) {
+    if (!this.bubbles.length) return;
+    const keep = [];
+    ctx.save();
+    ctx.font = `${Math.max(9 * this.dpr, 10 * z) | 0}px ${PIXEL_FONT}`;
+    ctx.textAlign = 'center';
+    for (const b of this.bubbles) {
+      b.t += dt;
+      if (b.t >= b.life) continue;
+      const t = match.tanks[b.tank];
+      if (!t) continue;
+      const [x, yRaw] = w2s(t.x, t.y);
+      const y = yRaw - (56 + 14) * z;
+      const alpha = b.t < 0.15 ? b.t / 0.15 : b.t > b.life - 0.4 ? (b.life - b.t) / 0.4 : 1;
+      const tw = ctx.measureText(b.text).width;
+      const pad = 6 * this.dpr;
+      const bw = tw + pad * 2, bh = 16 * this.dpr;
+      const bx = Math.round(x - bw / 2), by = Math.round(y - bh);
+      ctx.globalAlpha = alpha;
+      // chunky pixel bubble: fill, 2px border, tail
+      ctx.fillStyle = 'rgba(12,16,28,0.92)';
+      ctx.fillRect(bx, by, bw, bh);
+      ctx.strokeStyle = t.color;
+      ctx.lineWidth = 2;
+      ctx.strokeRect(bx + 1, by + 1, bw - 2, bh - 2);
+      ctx.fillStyle = 'rgba(12,16,28,0.92)';
+      ctx.beginPath();
+      ctx.moveTo(x - 5 * this.dpr, by + bh);
+      ctx.lineTo(x + 5 * this.dpr, by + bh);
+      ctx.lineTo(x, by + bh + 6 * this.dpr);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = '#f2f4f8';
+      ctx.fillText(b.text, x, by + bh - 5 * this.dpr);
+      ctx.globalAlpha = 1;
+      keep.push(b);
+    }
+    ctx.restore();
+    this.bubbles = keep;
+  }
+
+  // sample a nearby texture color for debris (so buildings throw brick bits)
+  sampleTerrainColor(match, x, y) {
+    const t = match && match.terrain;
+    if (!t || !t.texture) return null;
+    for (let attempt = 0; attempt < 4; attempt++) {
+      const sx = clamp((x + (Math.random() - 0.5) * 30) | 0, 0, t.w - 1);
+      const sy = clamp((y + (Math.random() - 0.5) * 30) | 0, 0, t.h - 1);
+      if (t.mask[sy * t.w + sx]) {
+        const i = (sy * t.w + sx) * 4;
+        return `rgb(${t.texture.data[i]},${t.texture.data[i + 1]},${t.texture.data[i + 2]})`;
+      }
+    }
+    return null;
+  }
+
+  fxExplosion(x, y, r, nuke, weaponId, match) {
     const P = this.particles;
     const def = weaponId ? WDEF[weaponId] : null;
     const tint = (def && def.trail) || '#ffd9a0';
@@ -368,7 +460,7 @@ export class Renderer {
         });
       }
     }
-    // dirt spray (extra heavy for dust weapons)
+    // dirt spray (extra heavy for dust weapons) — colored like what it hit
     const dn = dusty ? n * 2 : n;
     for (let i = 0; i < dn; i++) {
       const a = -Math.PI / 2 + (Math.random() - 0.5) * 1.9;
@@ -376,7 +468,7 @@ export class Renderer {
       P.push({
         kind: 'debris', x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
         life: 0.7 + Math.random() * 0.9, t: 0, sz: 1 + Math.random() * 2.5,
-        col: this.theme ? this.theme.terrainTop : '#7a6248',
+        col: this.sampleTerrainColor(match, x, y) || (this.theme ? this.theme.terrainTop : '#7a6248'),
       });
     }
   }
@@ -576,6 +668,12 @@ export class Renderer {
 
     // projectiles + trails
     this.drawProjectiles(ctx, match, w2s, z, dt);
+
+    // pixel arrows tracking shells that fly above the screen
+    this.drawOffscreenArrows(ctx, match, w2s, z);
+
+    // speech bubbles above the talkers
+    this.drawBubbles(ctx, match, w2s, z, dt);
 
     // ambient weather
     if (this.ambient && this.ambient.length) {
@@ -913,13 +1011,17 @@ export class Renderer {
         continue;
       }
       if (p.kind === 'chunk') {
-        // tumbling debris chunk
+        // tumbling debris chunk, colored like the material it came from
+        if (!p._chunkCol && !p.shrap) {
+          p._chunkCol = this.sampleTerrainColor(match, p.x, p.y) ||
+            (this.theme ? this.theme.terrainTop : '#8a7458');
+        }
         const [cx, cy] = w2s(p.x, p.y);
         const sz = Math.max(2, p.chunkSz * 2.2 * z);
         ctx.save();
         ctx.translate(cx, cy);
         ctx.rotate(p.age * 7);
-        ctx.fillStyle = p.shrap ? '#c9d2df' : (this.theme ? this.theme.terrainTop : '#8a7458');
+        ctx.fillStyle = p.shrap ? '#c9d2df' : p._chunkCol;
         ctx.fillRect(-sz / 2, -sz / 2, sz, sz);
         ctx.fillStyle = 'rgba(0,0,0,0.35)';
         ctx.fillRect(-sz / 2, 0, sz, sz / 2);

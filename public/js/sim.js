@@ -283,7 +283,10 @@ export class Match {
     const def = WEAPON_BY_ID[weapon];
     if (t.weapons[weapon] !== Infinity) {
       t.weapons[weapon]--;
-      if (t.weapons[weapon] <= 0) delete t.weapons[weapon];
+      if (t.weapons[weapon] <= 0) {
+        delete t.weapons[weapon];
+        if (t.selectedWeapon === weapon) t.selectedWeapon = 'shell';
+      }
     }
     t.angle = angle = clamp(angle, 2, 178);
     t.power = power = clamp(power, 5, 100);

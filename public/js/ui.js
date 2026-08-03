@@ -1,6 +1,6 @@
 // UI screens (DOM): menu, setup, lobby, shop, summaries + in-game HUD updates.
 
-import { WEAPONS, ITEMS, AI_TYPES, TANK_COLORS, THEMES, DEFAULT_OPTIONS, CAMPAIGN } from './config.js';
+import { WEAPONS, ITEMS, AI_TYPES, TANK_COLORS, THEMES, DEFAULT_OPTIONS, CAMPAIGN, FUNNY_NAMES } from './config.js';
 
 // Every battle setting is configurable. [storedValue, label] pairs.
 const OPTION_DEFS = [
@@ -21,7 +21,9 @@ const OPTION_DEFS = [
 ];
 import { WEAPON_BY_ID, ITEM_BY_ID } from './sim.js';
 import { formatMoney, clamp } from './utils.js';
-import { ICONS } from './sprites.js';
+import { ICONS, uiIcon } from './sprites.js';
+
+const ic = (name) => `<img class="btn-icon" src="${uiIcon(name)}" alt="">`;
 
 const iconURLCache = new Map();
 function iconURL(id) {
@@ -65,6 +67,10 @@ export class UI {
     $('btn-battery').addEventListener('click', () => a.useBattery());
     $('wpn-list-btn').addEventListener('click', () => this.toggleWeaponList());
     this.sockCtx = $('wind-sock').getContext('2d');
+    // pixel icons on the static HUD buttons
+    $('btn-sound').innerHTML = ic('speaker');
+    $('btn-music').innerHTML = ic('note');
+    $('btn-battery').insertAdjacentHTML('afterbegin', `<img class="btn-icon" src="${ICONS.battery.toDataURL()}">`);
     $('btn-sound').classList.toggle('off', !a.sound.enabled);
     $('btn-music').classList.toggle('off', !a.sound.musicOn);
     $('btn-sound').addEventListener('click', (e) => {
@@ -84,7 +90,12 @@ export class UI {
     const t = match.current;
     $('hud-chip').style.background = t.color;
     $('hud-chip').style.color = t.color;
-    $('hud-name').textContent = t.name + (t.kind === 'ai' ? ' 🤖' : '');
+    $('hud-name').innerHTML = '';
+    $('hud-name').append(document.createTextNode(t.name));
+    if (t.kind === 'ai') {
+      const chip = el('span', 'bot-chip', 'BOT');
+      $('hud-name').append(chip);
+    }
     $('hud-hp').innerHTML = `HP <b>${Math.max(0, Math.round(t.hp))}</b>`;
     $('hud-cash').textContent = formatMoney(t.cash);
     const fuelEl = $('hud-fuel');
@@ -92,9 +103,9 @@ export class UI {
     const showMove = budget > 0 || t.fuel > 0;
     fuelEl.classList.toggle('hidden', !showMove);
     fuelEl.innerHTML = budget > 0
-      ? `🥾 <b>${budget}</b>${t.fuel > 0 ? ` ⛽ <b>${Math.floor(t.fuel)}</b>` : ''}`
-      : `⛽ <b>${Math.floor(t.fuel)}</b>`;
-    const gravBadge = match.gravity === 60 ? ' · 🌙 LOW-G' : match.gravity === 200 ? ' · 🪨 HI-G' : '';
+      ? `${ic('boot')}<b>${budget}</b>${t.fuel > 0 ? ` <img class="btn-icon" src="${ICONS.fuel.toDataURL()}"> <b>${Math.floor(t.fuel)}</b>` : ''}`
+      : `<img class="btn-icon" src="${ICONS.fuel.toDataURL()}"> <b>${Math.floor(t.fuel)}</b>`;
+    const gravBadge = match.gravity === 60 ? ' · LOW-G' : match.gravity === 200 ? ' · HI-G' : '';
     $('round-label').textContent = (match.roundsTotal >= 999
       ? `ROUND ${match.round}`
       : `ROUND ${match.round}/${match.roundsTotal}`) + gravBadge;
@@ -109,7 +120,7 @@ export class UI {
     $('wpn-name').textContent = wd.name;
     $('wpn-info').title = wd.desc;
     $('wpn-icon').src = iconURL(t.selectedWeapon);
-    const count = t.weapons[t.selectedWeapon];
+    const count = t.weapons[t.selectedWeapon] ?? 0;
     $('wpn-count').textContent = count === Infinity ? '∞' : `× ${count}`;
     // weapon rack closes when the turn moves on
     if (!$('wpn-list').classList.contains('hidden') && this._rackTank !== t) {
@@ -203,6 +214,35 @@ export class UI {
     }
   }
 
+  // ---------- multiplayer chat ----------
+  chatLine(name, color, text) {
+    const box = $('chat-box');
+    box.classList.remove('hidden');
+    const log = $('chat-log');
+    const line = el('div', 'chat-line');
+    line.innerHTML = `<b style="color:${color}"></b><span></span>`;
+    line.querySelector('b').textContent = name + ':';
+    line.querySelector('span').textContent = text;
+    log.append(line);
+    while (log.children.length > 6) log.firstChild.remove();
+    setTimeout(() => { line.style.opacity = '0'; }, 9000);
+    setTimeout(() => line.remove(), 10500);
+  }
+
+  openChat() {
+    const inp = $('chat-input');
+    $('chat-box').classList.remove('hidden');
+    inp.classList.remove('hidden');
+    inp.value = '';
+    inp.focus();
+  }
+
+  closeChat() {
+    const inp = $('chat-input');
+    inp.classList.add('hidden');
+    inp.blur();
+  }
+
   banner(text, sub = '') {
     const b = $('turn-banner');
     b.classList.remove('hidden');
@@ -234,12 +274,12 @@ export class UI {
     s.append(el('div', 'title', 'SCORCH'));
     s.append(el('div', 'subtitle', 'scorched earth · reborn'));
     const col = el('div', 'menu-col');
-    const bCamp = el('button', 'big-btn primary', '🎖 &nbsp;Campaign');
-    const bSand = el('button', 'big-btn', '🛠 &nbsp;Sandbox Editor');
-    const bLocal = el('button', 'big-btn', '⚔ &nbsp;Local Battle');
-    const bHost = el('button', 'big-btn', '🌐 &nbsp;Host Online Game');
-    const bJoin = el('button', 'big-btn', '🔗 &nbsp;Join Online Game');
-    const bHow = el('button', 'big-btn', '📖 &nbsp;How To Play');
+    const bCamp = el('button', 'big-btn primary', ic('medal') + 'Campaign');
+    const bSand = el('button', 'big-btn', ic('wrench') + 'Sandbox Editor');
+    const bLocal = el('button', 'big-btn', ic('battle') + 'Local Battle');
+    const bHost = el('button', 'big-btn', ic('globe') + 'Host Online Game');
+    const bJoin = el('button', 'big-btn', ic('link') + 'Join Online Game');
+    const bHow = el('button', 'big-btn', ic('book') + 'How To Play');
     bCamp.onclick = () => { this.app.sound.click(); this.app.startCampaign(); };
     bLocal.onclick = () => { this.app.sound.init(); this.app.sound.click(); this.showSetup(false); };
     bHost.onclick = () => { this.app.sound.init(); this.app.sound.click(); this.app.hostGame(); };
@@ -292,11 +332,17 @@ export class UI {
     const list = el('div');
     s.append(list);
 
-    const players = this._setupPlayers || [
-      { name: 'Player 1', kind: 'human', ai: null, color: 0 },
-      { name: 'Cyborg', kind: 'ai', ai: 'cyborg', color: 1 },
-      { name: 'Poolshark', kind: 'ai', ai: 'poolshark', color: 2 },
-    ];
+    const pickName = (used) => {
+      const free = FUNNY_NAMES.filter(n => !used.includes(n));
+      return free[Math.floor(Math.random() * free.length)] || 'Tank';
+    };
+    let players = this._setupPlayers;
+    if (!players) {
+      players = [];
+      players.push({ name: pickName([]), kind: 'human', ai: null, color: 0 });
+      players.push({ name: pickName(players.map(p => p.name)), kind: 'ai', ai: 'cyborg', color: 1 });
+      players.push({ name: pickName(players.map(p => p.name)), kind: 'ai', ai: 'poolshark', color: 2 });
+    }
     this._setupPlayers = players;
 
     const render = () => {
@@ -313,19 +359,12 @@ export class UI {
         name.maxLength = 14;
         name.oninput = () => { p.name = name.value; };
         const kind = el('select');
-        kind.innerHTML = `<option value="human">🎮 Human</option>` +
-          AI_TYPES.map(a => `<option value="ai:${a.id}">🤖 ${a.name}</option>`).join('');
+        kind.innerHTML = `<option value="human">Human</option>` +
+          AI_TYPES.map(a => `<option value="ai:${a.id}">BOT · ${a.name}</option>`).join('');
         kind.value = p.kind === 'human' ? 'human' : `ai:${p.ai}`;
         kind.onchange = () => {
           if (kind.value === 'human') { p.kind = 'human'; p.ai = null; }
-          else {
-            p.kind = 'ai';
-            p.ai = kind.value.slice(3);
-            const def = AI_TYPES.find(a => a.id === p.ai);
-            if (/^(Moron|Shooter|Poolshark|Cyborg|Unknown)/.test(p.name) || p.name.startsWith('Player')) {
-              p.name = def.name; render();
-            }
-          }
+          else { p.kind = 'ai'; p.ai = kind.value.slice(3); }
         };
         const del = el('button', 'row-del', '✕');
         del.title = 'Remove';
@@ -344,9 +383,7 @@ export class UI {
       if (players.length >= 8) return;
       const used = players.map(p => p.color);
       let c = 0; while (used.includes(c) && c < 7) c++;
-      players.push({ name: `Player ${players.length + 1}`, kind: 'ai', ai: 'shooter', color: c });
-      const def = AI_TYPES.find(a => a.id === 'shooter');
-      players[players.length - 1].name = def.name + ' ' + players.length;
+      players.push({ name: pickName(players.map(p => p.name)), kind: 'ai', ai: 'shooter', color: c });
       this.app.sound.click();
       render();
     };
@@ -481,6 +518,22 @@ export class UI {
 
     const refresh = () => { cashEl.textContent = formatMoney(tank.cash); grid(); };
 
+    // sorting controls
+    const sortRow = el('div', 'shop-sort');
+    sortRow.append(el('span', 'lbl', 'SORT'));
+    const sorts = [['type', 'Type'], ['priceAsc', 'Price Low-High'], ['priceDesc', 'Price High-Low']];
+    this._shopSort = this._shopSort || localStorage.getItem('scorch_shop_sort') || 'type';
+    for (const [key, label] of sorts) {
+      const b = el('button', 'sort-btn' + (this._shopSort === key ? ' active' : ''), label);
+      b.onclick = () => {
+        this._shopSort = key;
+        localStorage.setItem('scorch_shop_sort', key);
+        sortRow.querySelectorAll('.sort-btn').forEach(x => x.classList.toggle('active', x === b));
+        grid();
+      };
+      sortRow.append(b);
+    }
+    s.append(sortRow);
     s.append(el('h3', null, 'Weapons'));
     const wGrid = el('div', 'shop-grid');
     s.append(wGrid);
@@ -515,8 +568,14 @@ export class UI {
 
     const grid = () => {
       wGrid.innerHTML = ''; iGrid.innerHTML = '';
-      for (const w of WEAPONS) if (w.price > 0) wGrid.append(card(w, true));
-      for (const it of ITEMS) iGrid.append(card(it, false));
+      const sortFn = this._shopSort === 'priceAsc' ? (a, b) => a.price - b.price
+        : this._shopSort === 'priceDesc' ? (a, b) => b.price - a.price
+        : null;
+      let ws = WEAPONS.filter(w => w.price > 0);
+      let its = [...ITEMS];
+      if (sortFn) { ws = [...ws].sort(sortFn); its = its.sort(sortFn); }
+      for (const w of ws) wGrid.append(card(w, true));
+      for (const it of its) iGrid.append(card(it, false));
     };
     grid();
 
@@ -596,7 +655,7 @@ export class UI {
     CAMPAIGN.forEach((mdef, i) => {
       const state = i < c.mission ? 'done' : i === c.mission ? 'current' : 'locked';
       const row = el('div', `camp-row ${state}`);
-      const icon = state === 'done' ? '✔' : state === 'current' ? '▶' : '🔒';
+      const icon = state === 'done' ? ic('check') : state === 'current' ? ic('play') : ic('lock');
       row.innerHTML = `<span class="camp-ico">${icon}</span>
         <span class="camp-name">${i + 1}. ${mdef.name}</span>
         <span class="camp-foes">${mdef.foes.length} foe${mdef.foes.length > 1 ? 's' : ''}</span>`;
@@ -650,7 +709,7 @@ export class UI {
       const base = el('button', 'big-btn', 'Back to Base');
       base.onclick = () => { this.app.sound.click(); cbs.base(); };
       const next = el('button', 'big-btn primary',
-        c.mission >= CAMPAIGN.length ? 'CAMPAIGN COMPLETE 🏆' : 'NEXT MISSION ➔');
+        c.mission >= CAMPAIGN.length ? ic('crown') + 'CAMPAIGN COMPLETE' : 'NEXT MISSION ➔');
       next.onclick = () => { this.app.sound.click(); cbs.next(); };
       row.append(base, next);
       s.append(row);
@@ -678,7 +737,7 @@ export class UI {
     const row = el('div', 'btn-row');
     const menu = el('button', 'big-btn', 'Menu');
     menu.onclick = () => { this.app.sound.click(); cbs.menu(); };
-    const edit = el('button', 'big-btn', '🛠 Edit Map');
+    const edit = el('button', 'big-btn', ic('wrench') + 'Edit Map');
     edit.onclick = () => { this.app.sound.click(); cbs.edit(); };
     const again = el('button', 'big-btn primary', 'PLAY AGAIN');
     again.onclick = () => { this.app.sound.click(); cbs.again(); };

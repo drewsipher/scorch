@@ -1,12 +1,12 @@
 // App orchestrator: game loop, input, turn flow, shop sequencing, netplay wiring.
 
-import { SIM_DT, TANK_RADIUS, WORLD_W, AI_TYPES, CAMPAIGN, FOE_TIERS, DEFAULT_OPTIONS } from './config.js';
+import { SIM_DT, TANK_RADIUS, WORLD_W, AI_TYPES, CAMPAIGN, FOE_TIERS, DEFAULT_OPTIONS, TAUNTS, FUNNY_NAMES } from './config.js';
 import { Match, WEAPON_BY_ID } from './sim.js';
 import { Renderer } from './renderer.js';
 import { Sound } from './sound.js';
 import { UI } from './ui.js';
 import { makeNet } from './net.js';
-import { aiDecideTurn, aiShop, aiMaybeTaunt } from './ai.js';
+import { aiDecideTurn, aiShop } from './ai.js';
 import { Editor } from './editor.js';
 import { FxLab } from './fxlab.js';
 import { clamp } from './utils.js';
@@ -154,7 +154,24 @@ class App {
           this.ui.clear();
           this.ui.banner(`ROUND ${m.round}`, m.theme.name);
           break;
+        case 'fire': {
+          this._lastShooter = e.tank;
+          this._shotDealtDamage = false;
+          this.smackOnFire(e.tank);
+          break;
+        }
+        case 'damage': {
+          this._shotDealtDamage = true;
+          // victim complains (throttled)
+          if (e.amount > 4 && Math.random() < 0.4) this.botSay(e.tank, TAUNTS.hit);
+          break;
+        }
         case 'turnStart': {
+          // did the previous shooter whiff completely?
+          if (this._lastShooter !== undefined && !this._shotDealtDamage) {
+            this.botSay(this._lastShooter, TAUNTS.miss, 0.45);
+          }
+          this._lastShooter = undefined;
           const t = m.tanks[e.tank];
           // ensure selected weapon still exists
           if (!(t.weapons[t.selectedWeapon] > 0) && t.weapons[t.selectedWeapon] !== Infinity) {
@@ -171,7 +188,11 @@ class App {
         }
         case 'tankDeath': {
           const t = m.tanks[e.tank];
-          this.ui.taunt(`☠ ${t.name} destroyed`, t.color);
+          this.botSay(e.tank, TAUNTS.death, 0.9);
+          if (this._lastShooter !== undefined && this._lastShooter !== e.tank) {
+            setTimeout(() => this.botSay(this._lastShooter, TAUNTS.kill, 0.85), 900);
+          }
+          this.ui.taunt(`${t.name} destroyed`, t.color);
           break;
         }
         case 'roundEnd': {
@@ -191,6 +212,40 @@ class App {
     }
   }
 
+  // ---------- chat ----------
+  myTankIdx() {
+    const m = this.match;
+    if (!m) return -1;
+    return m.tanks.findIndex(t => t.kind === 'human' &&
+      (this.net.active ? t.netOwner === this.net.id : true));
+  }
+
+  sendChat(msg) {
+    const idx = this.myTankIdx();
+    const name = idx >= 0 ? this.match.tanks[idx].name : 'You';
+    const color = idx >= 0 ? this.match.tanks[idx].color : '#6ee7ff';
+    this.ui.chatLine(name, color, msg);
+    if (idx >= 0) this.renderer.say(idx, msg);
+    this.net.relay({ t: 'chat', msg });
+  }
+
+  // ---------- smack talk ----------
+  pickLine(pool) { return pool[Math.floor(Math.random() * pool.length)]; }
+
+  botSay(tankIdx, pool, chance = 1) {
+    const t = this.match && this.match.tanks[tankIdx];
+    if (!t || t.kind !== 'ai' || Math.random() > chance) return;
+    this.renderer.say(tankIdx, this.pickLine(pool));
+  }
+
+  smackOnFire(tankIdx) {
+    const t = this.match.tanks[tankIdx];
+    if (t.kind !== 'ai' || Math.random() > 0.55) return;
+    const personal = TAUNTS.fire[t.ai] || [];
+    const pool = Math.random() < 0.55 && personal.length ? personal : TAUNTS.fire.generic;
+    this.renderer.say(tankIdx, this.pickLine(pool));
+  }
+
   // ---------- AI ----------
   scheduleAi(m, delay) {
     if (m === this.match && this.net.active && !this.net.isHost) return; // host drives AI
@@ -200,10 +255,6 @@ class App {
       if (m.phase !== 'aim' || m.current.kind !== 'ai') return;
       const tank = m.current;
       const action = aiDecideTurn(m, tank);
-      if (m === this.match) {
-        const taunt = aiMaybeTaunt(tank);
-        if (taunt && action.type === 'fire') this.ui.taunt(`${tank.name}: ${taunt}`, tank.color);
-      }
       this.applyAndRelay(m, action);
       if (action.type === 'battery') {
         // battery doesn't end the turn — fire after a beat
@@ -249,9 +300,23 @@ class App {
         case 'KeyB': this.useBattery(); break;
         case 'KeyQ': this.ui.toggleWeaponList(); break;
         case 'Escape': this.ui.hideWeaponList(); break;
+        case 'KeyT':
+          if (this.net.active && this.match) { e.preventDefault(); this.ui.openChat(); }
+          break;
       }
     });
     window.addEventListener('keyup', (e) => { delete this.held[e.code]; });
+    const chatInput = document.getElementById('chat-input');
+    chatInput.addEventListener('keydown', (e) => {
+      e.stopPropagation();
+      if (e.key === 'Enter') {
+        const msg = chatInput.value.trim().slice(0, 120);
+        if (msg) this.sendChat(msg);
+        this.ui.closeChat();
+      } else if (e.key === 'Escape') {
+        this.ui.closeChat();
+      }
+    });
     window.addEventListener('blur', () => { this.held = {}; });
 
     // mouse-drag aiming (slingshot from tank)
@@ -319,14 +384,20 @@ class App {
     const t = this.match.current;
     if (this.match.phase !== 'aim') return;
     const fine = this.held.ShiftLeft || this.held.ShiftRight ? 0.22 : 1;
-    if (this.held.ArrowLeft) t.angle = clamp(t.angle + 42 * fine * dt, 2, 178);
-    if (this.held.ArrowRight) t.angle = clamp(t.angle - 42 * fine * dt, 2, 178);
-    if (this.held.ArrowUp) t.power = clamp(t.power + 30 * fine * dt, 5, 100);
-    if (this.held.ArrowDown) t.power = clamp(t.power - 30 * fine * dt, 5, 100);
+    // ramping: taps nudge precisely, holds accelerate up to cruise speed
+    const adjusting = this.held.ArrowLeft || this.held.ArrowRight ||
+      this.held.ArrowUp || this.held.ArrowDown || this.adjustHold;
+    this._adjT = adjusting ? (this._adjT || 0) + dt : 0;
+    const ramp = Math.min(0.28 + this._adjT * 1.6, 3.2);
+    const aSpd = 26 * ramp * fine, pSpd = 20 * ramp * fine;
+    if (this.held.ArrowLeft) t.angle = clamp(t.angle + aSpd * dt, 2, 178);
+    if (this.held.ArrowRight) t.angle = clamp(t.angle - aSpd * dt, 2, 178);
+    if (this.held.ArrowUp) t.power = clamp(t.power + pSpd * dt, 5, 100);
+    if (this.held.ArrowDown) t.power = clamp(t.power - pSpd * dt, 5, 100);
     if (this.adjustHold) {
       const { what, dir } = this.adjustHold;
-      if (what === 'angle') t.angle = clamp(t.angle + dir * 42 * fine * dt, 2, 178);
-      else t.power = clamp(t.power + dir * 30 * fine * dt, 5, 100);
+      if (what === 'angle') t.angle = clamp(t.angle + dir * aSpd * dt, 2, 178);
+      else t.power = clamp(t.power + dir * pSpd * dt, 5, 100);
     }
     // movement: the free per-turn budget drains first, then fuel
     const mv = (this.held.KeyA ? -1 : 0) + (this.held.KeyD ? 1 : 0);
@@ -796,6 +867,18 @@ class App {
           t.x = data.x;
           t.y = m.terrain.topY(t.x | 0);
         }
+        break;
+      }
+      case 'chat': {
+        const m = this.match;
+        const msg = String(data.msg || '').slice(0, 120);
+        if (!msg) break;
+        const idx = m ? m.tanks.findIndex(t => t.netOwner === from) : -1;
+        const name = idx >= 0 ? m.tanks[idx].name
+          : (this.net.peers.find(p => p.id === from)?.name || 'Player');
+        const color = idx >= 0 ? m.tanks[idx].color : '#6ee7ff';
+        this.ui.chatLine(name, color, msg);
+        if (idx >= 0) this.renderer.say(idx, msg);
         break;
       }
       case 'aim': {

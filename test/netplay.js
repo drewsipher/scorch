@@ -164,6 +164,29 @@ if (JSON.stringify(sA) !== JSON.stringify(sB)) {
   console.log('sync OK after turns:', JSON.stringify(sA.tanks));
 }
 
+// chat: B sends a message through the UI; A must see it in the log + as a bubble
+{
+  await B.evaluate(() => window.app.ui.openChat());
+  await sleep(200);
+  await B.type('#chat-input', 'nice shot, tin can');
+  await B.keyboard.press('Enter');
+  let seen = '';
+  for (let i = 0; i < 20; i++) {
+    seen = await A.evaluate(() => document.getElementById('chat-log').textContent);
+    if (seen.includes('nice shot, tin can')) break;
+    await sleep(200);
+  }
+  if (!seen.includes('nice shot, tin can')) errors.push('chat message not relayed to host: ' + JSON.stringify(seen));
+  else console.log('chat relay OK');
+  const bubble = await A.evaluate(() => {
+    const r = window.app.renderer;
+    return (r.bubbles || []).some(b => b.text && b.text.toLowerCase().includes('nice shot'));
+  });
+  if (!bubble) errors.push('chat bubble not shown over speaker tank on host');
+  else console.log('chat bubble OK');
+  await A.screenshot({ path: `${SHOTS}/22-chat.png` });
+}
+
 console.log('ERRORS:', errors.length ? errors : 'none');
 await browser.close();
 process.exit(errors.length ? 1 : 0);

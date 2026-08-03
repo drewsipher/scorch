@@ -108,6 +108,52 @@ export const CAMPAIGN = [
   { name: 'Unknown', desc: 'Nobody who fought it has described it afterward.', foes: [{ ai: 'unknown' }, { ai: 'cyborg' }], tier: 7, opt: { theme: 'void_night' }, reward: 20000 },
 ];
 
+// Funny call signs for players and bots alike
+export const FUNNY_NAMES = [
+  'Gen. Mayhem', 'Tanky McTank', 'Boomhilda', 'Duke Kaboom', 'Sir Loin',
+  'Miss Fire', 'Dirt Reynolds', 'Napalm Sunday', 'Megaton Mary', 'Kaboompa',
+  'Baron von Boom', 'Shellvis', 'Howitzer Hank', 'Lady Lobber', 'Crater Tot',
+  'Big Bertha Jr', 'Mort Arr', 'Colonel Panic', 'Shrapnel Sal', 'Duds McGee',
+  'Ka-Blamo', 'Artie Llery', 'Rico Chet', 'Sgt. Splode', 'Gunny Rabbit',
+  'The Accountant', 'Warhead Wanda', 'Fuse Box', 'Ballista Bob', 'Countess Boom',
+  'Pixel Patton', 'Nuke Skywalker', 'Trajectory Tim', 'Whiff Master', 'Ol Ironsides',
+  'Cannonball Kay', 'Blast Ketchum', 'Muzzle Tov', 'Barrage Obama', 'Tread Sheeran',
+];
+
+// Smack talk banks. Personality-specific lines mix with the generic pools.
+export const TAUNTS = {
+  fire: {
+    generic: [
+      'Eat this!', 'Special delivery!', 'Incoming!', 'Think fast!', 'Catch!',
+      'Sky mail!', 'This one has your name on it!', 'Duck!', 'Fore!',
+      'Say hello to gravity!',
+    ],
+    moron: ['Which button fires?', 'Oops, wrong lever.', 'I meant to do that.', 'Watch this! Maybe.', 'Is it supposed to smoke?', 'YEET.'],
+    shooter: ['Getting warmer!', 'Range found.', 'Steady... steady...', 'Adjusting two clicks left.', 'This one feels right.'],
+    poolshark: ['Corner pocket.', 'All angles.', 'Chalking up.', 'Bank shot, off the ridge.', 'Called it.'],
+    cyborg: ['TARGET ACQUIRED.', 'CALCULATING...', 'RESISTANCE: FUTILE.', 'WIND COMPENSATION: APPLIED.', 'PROBABILITY OF IMPACT: HIGH.'],
+    unknown: ['...', 'Goodbye.', 'Nothing personal.', 'You were warned.', 'Sleep now.'],
+  },
+  hit: [
+    'OW! My paint job!', 'Rude.', 'I felt that one.', "You'll pay for that!",
+    'Barely a scratch!', 'MEDIC!', 'That was my good side!', 'Okay. Now I am mad.',
+    'My chiropractor will hear about this.', 'Tis but a dent!',
+  ],
+  miss: [
+    'I was just warming up.', 'The wind ate it.', 'Practice shot!',
+    'That was a warning.', 'My sights are off. Definitely the sights.',
+    'Curse you, physics!', 'Recalculating...', 'Who built this terrain?!',
+  ],
+  kill: [
+    'Scratch one!', 'Who is next?', 'Delivered.', 'Nothing but crater.',
+    'Should have bought a shield.', 'I will send flowers.', 'Boom. Roasted.',
+  ],
+  death: [
+    'Tell my treads... I loved them...', 'Avenge me!', 'Worth it.',
+    'I regret nothing!', 'See you in the shop...', 'This is fine.', 'Ouch.',
+  ],
+};
+
 export const TANK_COLORS = [
   '#ff5c5c', '#4dc9ff', '#7dff8e', '#ffd24d',
   '#c58cff', '#ff9c40', '#4dffdc', '#ff7ab8',

@@ -5,6 +5,7 @@ import { WORLD_W, WORLD_H, THEMES, AI_TYPES, WEAPONS, ITEMS } from './config.js'
 import { Terrain, ROCK, SAND, METAL } from './terrain.js';
 import { ICONS } from './sprites.js';
 import { PROP_SETS, decodeProp } from './assets/index.js';
+import { uiIcon } from './sprites.js';
 
 // flat list of every placeable prop with display names
 const PROP_LIST = [];
@@ -180,7 +181,7 @@ export class Editor {
       ctx.font = `${Math.max(9 * r.dpr, 10 * z) | 0}px "Press Start 2P", monospace`;
       ctx.textAlign = 'center';
       ctx.fillStyle = 'rgba(6,8,14,0.7)';
-      const label = (sp.role === 'player' ? 'YOU' : `E${i}`) + (pos.cave ? ' ⛏' : '');
+      const label = (sp.role === 'player' ? 'YOU' : `E${i}`) + (pos.cave ? ' CAVE' : '');
       const tw = ctx.measureText(label).width;
       ctx.fillRect(sx - tw / 2 - 3, sy - 58 * z, tw + 6, 13 * r.dpr);
       ctx.fillStyle = this.selSpawn === i ? '#ffd24d' : '#f2f4f8';
@@ -304,10 +305,10 @@ export class Editor {
       <div class="ed-row">
         <span class="lbl">TOOL</span>
         <div class="ed-tools">
-          <button data-tool="draw" class="ed-tool active">✏ Draw</button>
-          <button data-tool="erase" class="ed-tool">⌫ Erase</button>
-          <button data-tool="spawn" class="ed-tool">⚑ Spawns</button>
-          <button data-tool="props" class="ed-tool">🏚 Props</button>
+          <button data-tool="draw" class="ed-tool active"><img class="btn-icon" data-ic="pencil">Draw</button>
+          <button data-tool="erase" class="ed-tool"><img class="btn-icon" data-ic="eraser">Erase</button>
+          <button data-tool="spawn" class="ed-tool"><img class="btn-icon" data-ic="flag">Spawns</button>
+          <button data-tool="props" class="ed-tool"><img class="btn-icon" data-ic="house">Props</button>
         </div>
       </div>
       <label class="ed-row"><span class="lbl">BRUSH ${' '}<span id="ed-brush-val"></span></span>
@@ -321,7 +322,7 @@ export class Editor {
           <option value="city">City Ruins</option>
           <option value="moonscape">Moonscape</option>
         </select>
-        <button id="ed-random" class="mini-wide">🎲 Generate</button>
+        <button id="ed-random" class="mini-wide"><img class="btn-icon" data-ic="dice">Generate</button>
         <button id="ed-flat" class="mini-wide">▂ Flat</button>
       </div>
       <div class="ed-row ed-props-row hidden" id="ed-props-row">
@@ -342,6 +343,7 @@ export class Editor {
       </div>
     `;
     document.body.append(this.panel);
+    this.panel.querySelectorAll('img[data-ic]').forEach(img => { img.src = uiIcon(img.dataset.ic); });
     const $ = (id) => this.panel.querySelector('#' + id);
 
     $('ed-name').value = this.map.name;
@@ -466,7 +468,7 @@ export class Editor {
     this.map.spawns.forEach((sp, i) => {
       const row = el('div', 'ed-spawn' + (this.selSpawn === i ? ' selected' : ''));
       const isPlayer = sp.role === 'player';
-      const label = el('span', 'ed-spawn-label', isPlayer ? '🧑 YOU' : `E${i}`);
+      const label = el('span', 'ed-spawn-label', isPlayer ? 'YOU' : `E${i}`);
       row.append(label);
       if (!isPlayer) {
         const sel = el('select');
@@ -476,7 +478,7 @@ export class Editor {
         sel.onclick = (e) => e.stopPropagation();
         row.append(sel);
       }
-      const arm = el('button', 'mini-wide', `🎒 ${this.loadoutCount(sp)}`);
+      const arm = el('button', 'mini-wide', `<img class="btn-icon" src="${uiIcon('crate')}"> ${this.loadoutCount(sp)}`);
       arm.title = 'Edit loadout';
       arm.onclick = (e) => { e.stopPropagation(); this.openLoadout(sp, isPlayer ? 'You' : `Enemy ${i}`); };
       row.append(arm);

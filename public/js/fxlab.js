@@ -187,7 +187,7 @@ export class FxLab {
     }
     const dg = $('#fx-deaths');
     for (const d of DEATHS) {
-      const b = el('button', 'fx-btn', `<span>☠ ${d}</span>`);
+      const b = el('button', 'fx-btn', `<span>${d}</span>`);
       b.onclick = () => { this.app.sound.resume(); this.triggerDeath(d); };
       dg.append(b);
     }

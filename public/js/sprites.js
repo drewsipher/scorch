@@ -363,6 +363,116 @@ export function buildCloud(seedRng) {
   return toCanvas(finish(g, { shade: false }));
 }
 
+// ---------- UI pixel icons (replace emojis; 12x12, chunky) ----------
+const UI_CACHE = new Map();
+export function uiIcon(name) {
+  if (UI_CACHE.has(name)) return UI_CACHE.get(name);
+  const g = grid(12, 12);
+  const W = '#f2f4f8', Y = '#ffd24d', O = '#ff9c40', R = '#ff5c5c',
+    B = '#5fc9e8', G = '#7dff8e', S = '#98a2b3', D = '#5a6273', N = '#9c7648';
+  switch (name) {
+    case 'medal':
+      disc(g, 6, 7, 3.2, Y); disc(g, 6, 7, 1.4, O);
+      px(g, 4, 2, R); px(g, 5, 3, R); px(g, 7, 3, R); px(g, 8, 2, R);
+      px(g, 5, 2, W); px(g, 7, 2, W);
+      break;
+    case 'battle':
+      // crossed barrels
+      for (let i = 0; i < 7; i++) { px(g, 2 + i, 2 + i, S); px(g, 9 - i, 2 + i, D); }
+      px(g, 2, 9, Y); px(g, 9, 9, Y); px(g, 1, 10, O); px(g, 10, 10, O);
+      break;
+    case 'wrench':
+      px(g, 8, 2, S); px(g, 9, 2, S); px(g, 10, 3, S); px(g, 10, 4, S);
+      px(g, 8, 4, S); px(g, 9, 4, S);
+      for (let i = 0; i < 6; i++) px(g, 7 - i, 5 + i, D);
+      px(g, 1, 10, S); px(g, 2, 10, S); px(g, 1, 9, S);
+      break;
+    case 'globe':
+      disc(g, 6, 6, 4.4, B);
+      lineH(g, 2, 10, 6, W);
+      for (let i = 0; i < 9; i++) px(g, 6, 2 + i, W);
+      px(g, 4, 3, W); px(g, 8, 3, W); px(g, 4, 9, W); px(g, 8, 9, W);
+      break;
+    case 'link':
+      rect(g, 1, 4, 4, 4, S); rect(g, 2, 5, 2, 2, null);
+      rect(g, 7, 4, 4, 4, S); rect(g, 8, 5, 2, 2, null);
+      lineH(g, 4, 7, 5, W); lineH(g, 4, 7, 6, W);
+      break;
+    case 'book':
+      rect(g, 2, 2, 8, 9, N);
+      rect(g, 3, 3, 6, 7, W);
+      lineH(g, 4, 7, 4, S); lineH(g, 4, 7, 6, S); lineH(g, 4, 6, 8, S);
+      break;
+    case 'boot':
+      rect(g, 4, 2, 3, 5, N); rect(g, 4, 7, 6, 3, N);
+      lineH(g, 4, 9, 9, D); px(g, 9, 8, D);
+      break;
+    case 'speaker':
+      rect(g, 2, 4, 2, 4, S);
+      for (let i = 0; i < 3; i++) { px(g, 4 + i, 3 - 0 + i * 0, W); }
+      rect(g, 4, 3, 2, 6, W);
+      px(g, 8, 4, B); px(g, 9, 3, B); px(g, 8, 7, B); px(g, 9, 8, B); px(g, 10, 5, B); px(g, 10, 6, B);
+      break;
+    case 'note':
+      rect(g, 7, 2, 2, 6, W); px(g, 9, 2, W); px(g, 10, 3, W);
+      disc(g, 6, 9, 1.8, B); 
+      break;
+    case 'flag':
+      for (let i = 0; i < 9; i++) px(g, 3, 2 + i, S);
+      rect(g, 4, 2, 5, 3, R); px(g, 9, 3, R);
+      break;
+    case 'house':
+      for (let i = 0; i < 4; i++) lineH(g, 6 - i - 1, 6 + i, 2 + i, O);
+      rect(g, 3, 6, 6, 5, N);
+      rect(g, 5, 8, 2, 3, D);
+      break;
+    case 'pencil':
+      for (let i = 0; i < 6; i++) { px(g, 8 - i, 2 + i, Y); px(g, 9 - i, 2 + i, O); }
+      px(g, 2, 9, W); px(g, 3, 8, W);
+      break;
+    case 'eraser':
+      rect(g, 3, 4, 6, 4, R); rect(g, 3, 8, 6, 2, W);
+      break;
+    case 'dice':
+      rect(g, 2, 2, 8, 8, W);
+      px(g, 4, 4, D); px(g, 7, 4, D); px(g, 5, 6, D); px(g, 4, 7, D); px(g, 7, 7, D);
+      break;
+    case 'crate':
+      rect(g, 2, 3, 8, 7, N);
+      lineH(g, 2, 9, 6, D);
+      for (let i = 0; i < 7; i++) px(g, 2 + i, 3 + i, D);
+      break;
+    case 'check':
+      px(g, 2, 6, G); px(g, 3, 7, G); px(g, 4, 8, G);
+      for (let i = 0; i < 5; i++) px(g, 5 + i, 7 - i, G);
+      break;
+    case 'lock':
+      rect(g, 3, 6, 6, 5, Y);
+      px(g, 4, 4, S); px(g, 7, 4, S); px(g, 4, 5, S); px(g, 7, 5, S); lineH(g, 5, 6, 3, S);
+      px(g, 5, 8, D); px(g, 6, 8, D);
+      break;
+    case 'play':
+      for (let i = 0; i < 5; i++) rect(g, 3 + i, 2 + i, 1, 9 - i * 2, G);
+      break;
+    case 'crown':
+      rect(g, 2, 7, 8, 3, Y);
+      px(g, 2, 5, Y); px(g, 2, 6, Y); px(g, 5, 4, Y); px(g, 6, 4, Y); px(g, 5, 5, Y); px(g, 6, 5, Y);
+      px(g, 9, 5, Y); px(g, 9, 6, Y);
+      px(g, 4, 8, R); px(g, 7, 8, B);
+      break;
+    case 'skull':
+      disc(g, 6, 5, 3.4, W);
+      rect(g, 4, 8, 5, 2, W);
+      px(g, 4, 5, D); px(g, 8, 5, D); px(g, 6, 7, D);
+      break;
+    default:
+      disc(g, 6, 6, 4, S);
+  }
+  const url = toCanvas(finish(g, { shade: false })).toDataURL();
+  UI_CACHE.set(name, url);
+  return url;
+}
+
 // ---------- registry ----------
 import { WEAPONS, ITEMS } from './config.js';
 
