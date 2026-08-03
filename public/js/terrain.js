@@ -7,7 +7,10 @@ import { makeRng, makeNoise1D, hexToRgb, lerp, clamp } from './utils.js';
 import { PROP_SETS, getProp, findPropRef, decodeProp } from './assets/index.js';
 
 // mask cell values
-export const AIR = 0, ROCK = 1, SAND = 2, METAL = 3;
+// BRICK is brittle structural material (buildings, moon boulders): it never
+// turns to dust — blasts crack it into rigid chunks that fall as sections,
+// and anything left without a path to the ground collapses wholesale.
+export const AIR = 0, ROCK = 1, SAND = 2, METAL = 3, BRICK = 4;
 
 export class Terrain {
   constructor() {
@@ -23,6 +26,7 @@ export class Terrain {
     this._sandTick = 0;
     this.props = [];                             // stamped art props [{def,x,y}] for texture painting
     this.sandColor = null;                       // per-grain 0xRRGGBB carried by moving sand (render-only)
+    this._hasBrick = false;                      // sticky: any BRICK ever written (fracture fast-path)
   }
 
   ensureSandColor() {
@@ -122,15 +126,24 @@ export class Terrain {
         }
       }
     } else if (style === 'moonscape') {
-      // pockmarked craters with raised rock rims
+      // pockmarked craters with raised brittle rims — moon rock fragments
+      // into shards rather than pouring like dust
       const craters = rng.int(6, 10);
       for (let c = 0; c < craters; c++) {
         const cx = rng.int(90, this.w - 90);
         const r = rng.int(28, 85);
         const cy = this.topY(cx) + (r * 0.25 | 0);
-        this.paintMat(cx - r, this.topY(clamp(cx - r, 0, this.w - 1)) - 4, (r * 0.22) | 0, ROCK);
-        this.paintMat(cx + r, this.topY(clamp(cx + r, 0, this.w - 1)) - 4, (r * 0.22) | 0, ROCK);
+        this.paintMat(cx - r, this.topY(clamp(cx - r, 0, this.w - 1)) - 4, (r * 0.22) | 0, BRICK);
+        this.paintMat(cx + r, this.topY(clamp(cx + r, 0, this.w - 1)) - 4, (r * 0.22) | 0, BRICK);
         this.carve(cx, cy, r);
+      }
+      // scattered surface boulders that shatter when hit
+      const boulders = rng.int(7, 12);
+      for (let b = 0; b < boulders; b++) {
+        const bx = rng.int(70, this.w - 70);
+        const br = rng.int(10, 30);
+        const by = this.topY(bx) - ((br * 0.45) | 0);
+        this.paintMat(bx, by, br, BRICK);
       }
     }
   }
@@ -167,7 +180,8 @@ export class Terrain {
           for (let xx = x; xx < x + bw; xx++) {
             for (let yy = gy - bh; yy < gy; yy++) {
               const shell = xx < x + 5 || xx >= x + bw - 5 || yy < gy - bh + 8;
-              this.mask[yy * this.w + xx] = (solidSteel || shell) ? METAL : ROCK;
+              this.mask[yy * this.w + xx] = (solidSteel || shell) ? METAL : BRICK;
+              if (!(solidSteel || shell)) this._hasBrick = true;
             }
           }
         }
@@ -189,7 +203,9 @@ export class Terrain {
         if (!m) continue;
         const wx = x + px;
         if (wx < 0 || wx >= this.w) continue;
-        this.mask[wy * this.w + wx] = m;
+        // building masonry is brittle: it fractures instead of sandifying
+        this.mask[wy * this.w + wx] = m === ROCK ? BRICK : m;
+        if (m === ROCK) this._hasBrick = true;
       }
     }
     this.recalcTop(Math.max(0, x - 1), Math.min(this.w - 1, x + dec.w + 1));
@@ -289,6 +305,7 @@ export class Terrain {
         if (dx * dx + dy * dy <= r2) this.mask[row + x] = mat;
       }
     }
+    if (mat === BRICK) this._hasBrick = true;
     this.recalcTop(x0, x1);
     this.markDirty(x0, 0, x1);
   }
@@ -323,6 +340,7 @@ export class Terrain {
       for (const run of cols[x]) {
         const [s, l] = run;
         const mat = run[2] ?? ROCK;
+        if (mat === BRICK) this._hasBrick = true;
         const end = Math.min(s + l, this.h);
         for (let y = Math.max(0, s); y < end; y++) this.mask[y * this.w + x] = mat;
       }
@@ -394,6 +412,157 @@ export class Terrain {
       }
     }
     if (touched) this.activate(x0 - 4, x1 + 4, Math.max(0, y0 - 40), this.h - 1);
+  }
+
+  // ---- Brittle fracture (buildings, moon rock) ----
+  // A blast cracks nearby BRICK into rigid chunks along jittered grid seams,
+  // then a support pass floods the remaining brick from its ground contacts:
+  // any section with no path down to solid footing collapses too — destroy a
+  // building's foundation and the whole thing comes down in sections.
+  // Mask cells are cleared here; returns chunk descriptors for the sim to drop.
+  fractureAt(cx, cy, r) {
+    if (!this._hasBrick) return [];
+    const w = this.w, h = this.h, m = this.mask;
+    const rOut = (r * 1.35 + 6) | 0;
+    const marks = new Set();
+    const x0r = clamp(cx - rOut, 0, w - 1), x1r = clamp(cx + rOut, 0, w - 1);
+    const y0r = clamp(cy - rOut, 0, h - 1), y1r = clamp(cy + rOut, 0, h - 1);
+    const r2 = rOut * rOut;
+    for (let y = y0r; y <= y1r; y++) {
+      const dy = y - cy, row = y * w;
+      for (let x = x0r; x <= x1r; x++) {
+        const dx = x - cx;
+        if (dx * dx + dy * dy <= r2 && m[row + x] === BRICK) marks.add(row + x);
+      }
+    }
+
+    // support scan window: wide enough for a whole building, up to the sky
+    const wx0 = clamp(cx - 300, 0, w - 1), wx1 = clamp(cx + 300, 0, w - 1);
+    const wy0 = 0, wy1 = clamp(cy + rOut + 80, 0, h - 1);
+    const ww = wx1 - wx0 + 1, wh = wy1 - wy0 + 1;
+    const seen = new Uint8Array(ww * wh);
+    const stack = [];
+    let anyBrick = false;
+    for (let y = wy0; y <= wy1; y++) {
+      const row = y * w;
+      for (let x = wx0; x <= wx1; x++) {
+        const i = row + x;
+        if (m[i] !== BRICK || marks.has(i)) continue;
+        anyBrick = true;
+        // anchors: resting on non-brick solid, on the world floor, or touching
+        // the window edge (structure continues beyond — assume it holds)
+        const below = y + 1 > wy1 ? AIR : m[i + w];
+        const anchored = y + 1 >= h ||
+          (below !== AIR && below !== BRICK) ||
+          x === wx0 || x === wx1 || y === wy1;
+        if (anchored) { seen[(y - wy0) * ww + (x - wx0)] = 1; stack.push(i); }
+      }
+    }
+    if (marks.size === 0 && !anyBrick) return [];
+    // flood support through connected brick (4-way)
+    while (stack.length) {
+      const i = stack.pop();
+      const x = i % w, y = (i / w) | 0;
+      const nb = [i - w, i + w, i - 1, i + 1];
+      const nx = [x, x, x - 1, x + 1], ny = [y - 1, y + 1, y, y];
+      for (let k = 0; k < 4; k++) {
+        const xx = nx[k], yy = ny[k];
+        if (xx < wx0 || xx > wx1 || yy < wy0 || yy > wy1) continue;
+        const j = nb[k], si = (yy - wy0) * ww + (xx - wx0);
+        if (seen[si] || m[j] !== BRICK || marks.has(j)) continue;
+        seen[si] = 1;
+        stack.push(j);
+      }
+    }
+    // unsupported brick joins the collapse
+    for (let y = wy0; y <= wy1; y++) {
+      const row = y * w;
+      for (let x = wx0; x <= wx1; x++) {
+        const i = row + x;
+        if (m[i] === BRICK && !marks.has(i) && !seen[(y - wy0) * ww + (x - wx0)]) marks.add(i);
+      }
+    }
+    if (marks.size === 0) return [];
+
+    // partition into chunks on a jittered grid (bigger chunks for big collapses)
+    const cs = marks.size > 14000 ? 30 : marks.size > 4000 ? 20 : 13;
+    const groups = new Map();
+    for (const i of marks) {
+      const x = i % w, y = (i / w) | 0;
+      const gy = (y / cs) | 0;
+      // per-row horizontal offset breaks the vertical seams into brickwork
+      let hsh = Math.imul(gy ^ 0x9e3779b9, 2654435761);
+      hsh = (hsh ^ (hsh >>> 13)) >>> 0;
+      const gx = ((x + (hsh % cs)) / cs) | 0;
+      const key = gy * 8192 + gx;
+      let g = groups.get(key);
+      if (!g) { g = []; groups.set(key, g); }
+      g.push(i);
+    }
+    const td = this.texture ? this.texture.data : null;
+    const chunks = [];
+    let minX = w, maxX = 0;
+    for (const g of groups.values()) {
+      let bx0 = w, bx1 = 0, by0 = h, by1 = 0;
+      for (const i of g) {
+        const x = i % w, y = (i / w) | 0;
+        if (x < bx0) bx0 = x; if (x > bx1) bx1 = x;
+        if (y < by0) by0 = y; if (y > by1) by1 = y;
+      }
+      const cw = bx1 - bx0 + 1, ch = by1 - by0 + 1;
+      const cells = new Uint8Array(cw * ch);
+      const colors = new Uint32Array(cw * ch);
+      for (const i of g) {
+        const x = i % w, y = (i / w) | 0;
+        const ci = (y - by0) * cw + (x - bx0);
+        cells[ci] = 1;
+        if (td) {
+          const t = i * 4;
+          colors[ci] = (td[t] << 16) | (td[t + 1] << 8) | td[t + 2];
+        }
+        m[i] = AIR;
+      }
+      if (bx0 < minX) minX = bx0;
+      if (bx1 > maxX) maxX = bx1;
+      chunks.push({ x0: bx0, y0: by0, w: cw, h: ch, cells, colors, area: g.length });
+    }
+    this.recalcTop(Math.max(0, minX - 1), Math.min(w - 1, maxX + 1));
+    this.markDirty(Math.max(0, minX - 1), 0, Math.min(w - 1, maxX + 1));
+    return chunks;
+  }
+
+  // Re-stamp a landed rubble chunk into the world (still brittle, still its
+  // own colors — a collapsed building leaves a colored rubble pile that can
+  // be shattered again).
+  stampChunk(chunk, x0, y0) {
+    const w = this.w, h = this.h, m = this.mask;
+    const td = this.texture ? this.texture.data : null;
+    let minX = w, maxX = 0;
+    for (let py = 0; py < chunk.h; py++) {
+      const wy = y0 + py;
+      if (wy < 0 || wy >= h) continue;
+      for (let px = 0; px < chunk.w; px++) {
+        if (!chunk.cells[py * chunk.w + px]) continue;
+        const wx = x0 + px;
+        if (wx < 0 || wx >= w) continue;
+        const i = wy * w + wx;
+        if (m[i] !== AIR) continue;
+        m[i] = BRICK;
+        if (td) {
+          const c = chunk.colors[py * chunk.w + px];
+          if (c) {
+            const t = i * 4;
+            td[t] = (c >> 16) & 255; td[t + 1] = (c >> 8) & 255; td[t + 2] = c & 255;
+          }
+        }
+        if (wx < minX) minX = wx;
+        if (wx > maxX) maxX = wx;
+      }
+    }
+    if (minX <= maxX) {
+      this.recalcTop(Math.max(0, minX - 1), Math.min(w - 1, maxX + 1));
+      this.markDirty(Math.max(0, minX - 1), 0, Math.min(w - 1, maxX + 1));
+    }
   }
 
   // One deterministic falling-sand step (Noita-style): sand falls up to 4 cells,
@@ -678,11 +847,12 @@ export class Terrain {
         if (s && inAir) {
           // crust only on the true surface or on rock ceilings (tunnels) —
           // buried sand pockets stay plain so no stray dark lines appear
-          if (y !== this.top[gx] && this.mask[y * this.w + gx] !== ROCK && this.mask[y * this.w + gx] !== METAL) {
+          const mv = this.mask[y * this.w + gx];
+          if (y !== this.top[gx] && mv !== ROCK && mv !== METAL && mv !== BRICK) {
             inAir = false;
             continue;
           }
-          const runMetal = this.mask[y * this.w + gx] === METAL;
+          const runMetal = mv === METAL || mv === BRICK;
           for (let k = 0; k < 8 && y + k < this.h; k++) {
             if (this.mask[(y + k) * this.w + gx] === AIR) break;
             if (runMetal && k >= 2) break;   // steel: dark edge only, no soil crust

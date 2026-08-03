@@ -311,6 +311,15 @@ export class Editor {
           <button data-tool="props" class="ed-tool"><img class="btn-icon" data-ic="house">Props</button>
         </div>
       </div>
+      <div class="ed-row">
+        <span class="lbl">MATERIAL</span>
+        <div class="ed-tools" id="ed-mats">
+          <button data-m="1" class="ed-tool active"><span class="mat-swatch" style="background:#7d6248"></span>Rock</button>
+          <button data-m="2" class="ed-tool"><span class="mat-swatch" style="background:#d8b56a"></span>Sand</button>
+          <button data-m="3" class="ed-tool"><span class="mat-swatch" style="background:#9fb2c8"></span>Steel</button>
+          <button data-m="4" class="ed-tool"><span class="mat-swatch" style="background:#b0685a"></span>Brick</button>
+        </div>
+      </div>
       <label class="ed-row"><span class="lbl">BRUSH ${' '}<span id="ed-brush-val"></span></span>
         <input id="ed-brush" type="range" min="8" max="90" step="2"></label>
       <div class="ed-row ed-gen">

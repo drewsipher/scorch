@@ -78,6 +78,7 @@ export class Match {
     this.terrain = new Terrain();
     this.projectiles = [];
     this.napalm = [];
+    this.rubble = [];                    // rigid brittle chunks in freefall
     this.wind = 0;
     this.currentIdx = 0;
     this.turnCount = 0;
@@ -111,6 +112,7 @@ export class Match {
     }
     this.projectiles = [];
     this.napalm = [];
+    this.rubble = [];
     this.dying = [];
     const windR = WIND_RANGES[this.opt.windMode] ?? 45;
     this.wind = windR === 0 ? 0 : rng.range(-windR, windR);
@@ -359,6 +361,7 @@ export class Match {
     this.flightTime += dt;
     this.stepProjectiles(dt);
     this.stepNapalm(dt);
+    this.stepRubble(dt);
     this.stepDying(dt);
     // cartoon hangtime expires -> gravity notices
     let hangDone = false;
@@ -381,6 +384,7 @@ export class Match {
     }
     // end of flight?
     const entitiesDone = this.projectiles.length === 0 && this.napalm.length === 0 &&
+      this.rubble.length === 0 &&
       this.dying.length === 0 && !this.tanks.some(t => t.hangTime > 0);
     if (entitiesDone && this.terrain.settling()) {
       // give the pour a moment of screen time, then snap the stragglers home
@@ -397,6 +401,7 @@ export class Match {
       if (!this.checkRoundOver()) this.nextTurn();
     } else if (this.flightTime > 60) {
       // safety: clear stuck entities
+      this.rubble = [];
       this.projectiles = [];
       this.napalm = [];
       for (const d of this.dying) d.nextStage = 0;
@@ -801,6 +806,8 @@ export class Match {
     if (this.terrain.solid(x, y - radius - 14)) {
       this.terrain.sandifyChimney(x | 0, y | 0, (radius * 0.9) | 0);
     }
+    // brittle structures (buildings, moon rock) crack into rigid sections
+    this.shatterAt(x | 0, y | 0, radius | 0, ownerIdx);
     // heavy blasts hurl physical debris that arcs, splats, and stings on impact
     if (this.projectiles.length < 60 && radius >= 20) {
       const rng = makeRng((this.roundSeed ^ Math.imul((x | 0) + 7, 2654435761) ^ Math.imul((y | 0) + 13, 40503)) >>> 0);
@@ -822,6 +829,72 @@ export class Match {
     }
     this.tanksFall();
     this.emit({ type: 'explosion', x, y, r: radius, weapon: def ? def.id : null, nuke: !!(def && def.nukeFlash) });
+  }
+
+  // ---- Brittle collapse: crack surrounding brick free and drop it ----
+  shatterAt(x, y, r, ownerIdx) {
+    const chunks = this.terrain.fractureAt(x, y, r);
+    if (!chunks.length) return;
+    const rng = makeRng((this.roundSeed ^ Math.imul((x | 0) + 31, 668265263) ^ Math.imul((y | 0) + 17, 2246822519)) >>> 0);
+    for (const c of chunks) {
+      if (this.rubble.length >= 160) break;
+      // bottom profile per column: lowest solid pixel (for landing tests)
+      const bottom = new Int16Array(c.w).fill(-1);
+      for (let px = 0; px < c.w; px++) {
+        for (let py = c.h - 1; py >= 0; py--) {
+          if (c.cells[py * c.w + px]) { bottom[px] = py; break; }
+        }
+      }
+      this.rubble.push({
+        ...c, bottom, ownerIdx,
+        fx: c.x0, fy: c.y0,
+        vx: rng.range(-12, 12), vy: rng.range(-30, 0),
+        // near chunks give way first; the rest crack loose a beat later
+        delay: rng.range(0.05, 0.4),
+      });
+    }
+    this.emit({ type: 'shatter', x, y, n: chunks.length });
+  }
+
+  stepRubble(dt) {
+    if (!this.rubble.length) return;
+    const G = this.gravity;
+    const keep = [];
+    for (const c of this.rubble) {
+      if (c.delay > 0) { c.delay -= dt; keep.push(c); continue; }
+      c.vy += G * dt;
+      c.fx += c.vx * dt;
+      const lx = Math.round(c.fx);
+      let landed = false;
+      const targetY = c.fy + c.vy * dt;
+      // descend row by row so fast chunks can't tunnel through floors
+      while (c.fy < targetY) {
+        const iy = Math.floor(c.fy) + 1;
+        if (iy > targetY) { c.fy = targetY; break; }
+        for (let px = 0; px < c.w; px++) {
+          if (c.bottom[px] < 0) continue;
+          if (this.terrain.solid(lx + px, iy + c.bottom[px] + 1)) { landed = true; break; }
+        }
+        if (landed) { c.fy = iy; break; }
+        c.fy = iy;
+      }
+      if (c.fy > WORLD_H) continue;                 // fell out of the world
+      if (!landed) { keep.push(c); continue; }
+      const ly = Math.round(c.fy);
+      this.terrain.stampChunk(c, lx, ly);
+      // crush anything under the falling section
+      const attacker = this.tanks[c.ownerIdx] ?? null;
+      for (const t of this.tanks) {
+        if (!t.alive) continue;
+        if (t.x >= lx - 16 && t.x <= lx + c.w + 16 && Math.abs((ly + c.h) - t.y) < 30) {
+          const dmg = clamp(c.area / 45, 2, 16);
+          this.damageTank(t, dmg, attacker);
+        }
+      }
+      this.emit({ type: 'rubbleLand', x: lx + c.w / 2, y: ly + c.h, w: c.w, area: c.area });
+      this.tanksFall();
+    }
+    this.rubble = keep;
   }
 
   damageTank(t, dmg, attacker) {

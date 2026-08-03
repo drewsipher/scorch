@@ -244,6 +244,30 @@ export class Renderer {
           }
           break;
         }
+        case 'shatter': {
+          // masonry cracks apart: sharp snap of dust along the fracture
+          this.shakeIt(Math.min(10, 3 + e.n * 0.4));
+          for (let i = 0; i < Math.min(18, 4 + e.n); i++) {
+            this.particles.push({
+              kind: 'puff', x: e.x + (Math.random() - 0.5) * 50, y: e.y - Math.random() * 40,
+              vx: (Math.random() - 0.5) * 50, vy: -18 - Math.random() * 30,
+              life: 0.9, t: 0, sz: 2 + Math.random() * 2.2, col: '168,158,148',
+            });
+          }
+          break;
+        }
+        case 'rubbleLand': {
+          const n = Math.min(10, 3 + ((e.area / 60) | 0));
+          this.shakeIt(Math.min(8, 2 + e.area / 220));
+          for (let i = 0; i < n; i++) {
+            this.particles.push({
+              kind: 'puff', x: e.x + (Math.random() - 0.5) * e.w, y: e.y - 2,
+              vx: (Math.random() - 0.5) * 40, vy: -14 - Math.random() * 22,
+              life: 0.8, t: 0, sz: 2 + Math.random() * 2, col: '160,148,136',
+            });
+          }
+          break;
+        }
         case 'buriedFire': {
           // muffled underground shot: dust bursts from the sand around the tank
           this.shakeIt(5);
@@ -663,6 +687,9 @@ export class Renderer {
       this.drawTank(ctx, t, w2s, z, match);
     }
 
+    // falling rubble sections (brittle collapse)
+    this.drawRubble(ctx, match, w2s, z);
+
     // napalm flames
     this.drawNapalm(ctx, match, w2s, z);
 
@@ -1071,6 +1098,43 @@ export class Renderer {
     // drop puff timers for dead projectiles
     for (const id of this.puffTimers.keys()) {
       if (!liveIds.has(id)) this.puffTimers.delete(id);
+    }
+  }
+
+  // Rigid falling sections of a fractured building: each chunk keeps its own
+  // facade pixels (cached to a small canvas the first time it's drawn).
+  drawRubble(ctx, match, w2s, z) {
+    const rubble = match.rubble;
+    if (!rubble || !rubble.length) return;
+    for (const c of rubble) {
+      let cv = c._cnv;
+      if (!cv) {
+        cv = document.createElement('canvas');
+        cv.width = c.w; cv.height = c.h;
+        const cctx = cv.getContext('2d');
+        const img = cctx.createImageData(c.w, c.h);
+        const d = img.data;
+        for (let i = 0; i < c.cells.length; i++) {
+          if (!c.cells[i]) continue;
+          const col = c.colors[i];
+          const p = i * 4;
+          if (col) {
+            d[p] = (col >> 16) & 255; d[p + 1] = (col >> 8) & 255; d[p + 2] = col & 255;
+          } else {
+            d[p] = 138; d[p + 1] = 134; d[p + 2] = 140;
+          }
+          d[p + 3] = 255;
+        }
+        cctx.putImageData(img, 0, 0);
+        c._cnv = cv;
+      }
+      const [sx, sy] = w2s(c.fx, c.fy);
+      ctx.save();
+      ctx.imageSmoothingEnabled = false;
+      // a hair of tremble while the crack gives way
+      const jx = c.delay > 0 ? ((Math.random() - 0.5) * 1.6) : 0;
+      ctx.drawImage(cv, Math.round(sx + jx), Math.round(sy), Math.round(c.w * z), Math.round(c.h * z));
+      ctx.restore();
     }
   }
 

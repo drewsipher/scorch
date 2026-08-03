@@ -51,6 +51,90 @@ test('addDirt raises terrain', () => {
   assert(t.topY(x) < before, 'top should be higher (smaller y) after dirt');
 });
 
+console.log('brittle fracture');
+import { AIR, ROCK, BRICK } from '../public/js/terrain.js';
+
+// build a flat world with a free-standing brick tower on rock ground
+function towerWorld() {
+  const t = new Terrain();
+  t.mask.fill(AIR);
+  const gy = 500;
+  for (let x = 0; x < WORLD_W; x++) {
+    for (let y = gy; y < WORLD_H; y++) t.mask[y * t.w + x] = ROCK;
+  }
+  for (let x = 800; x < 880; x++) {
+    for (let y = gy - 200; y < gy; y++) t.mask[y * t.w + x] = BRICK;
+  }
+  t._hasBrick = true;
+  t.recalcTop(0, WORLD_W - 1);
+  return { t, gy };
+}
+
+test('blast into brick yields rigid chunks, not sand', () => {
+  const { t, gy } = towerWorld();
+  t.carve(840, gy - 100, 20);
+  const chunks = t.fractureAt(840, gy - 100, 20);
+  assert(chunks.length > 0, 'should produce chunks');
+  let sand = 0;
+  for (let x = 790; x < 890; x++) {
+    for (let y = gy - 220; y < gy; y++) if (t.mask[y * t.w + x] === 2) sand++;
+  }
+  assert.equal(sand, 0, 'no brick should have become sand');
+  for (const c of chunks) assert(c.area > 0 && c.w > 0 && c.h > 0, 'chunk has body');
+});
+
+test('destroying the foundation collapses the whole tower', () => {
+  const { t, gy } = towerWorld();
+  // carve out the ground under the tower AND the tower base
+  t.carve(840, gy, 70);
+  const chunks = t.fractureAt(840, gy, 70);
+  const dropped = chunks.reduce((s, c) => s + c.area, 0);
+  assert(dropped > 6000, `most of the tower should break free (got ${dropped}px)`);
+  // nothing brittle should remain floating above the crater
+  let leftover = 0;
+  for (let x = 800; x < 880; x++) {
+    for (let y = gy - 200; y < gy - 80; y++) if (t.mask[y * t.w + x] === BRICK) leftover++;
+  }
+  assert.equal(leftover, 0, `unsupported brick left standing: ${leftover}`);
+});
+
+test('a side hit drops only the disconnected overhang', () => {
+  const { t, gy } = towerWorld();
+  // notch the tower's left half at mid-height: the slab above the notch on the
+  // left is still connected to the right half, so the tower should stand
+  t.carve(800, gy - 100, 18);
+  const chunks = t.fractureAt(800, gy - 100, 18);
+  let standing = 0;
+  for (let x = 850; x < 880; x++) {
+    for (let y = gy - 200; y < gy; y++) if (t.mask[y * t.w + x] === BRICK) standing++;
+  }
+  assert(standing > 3000, `right side of tower should still stand (${standing})`);
+});
+
+test('rubble falls, lands, and re-stamps as terrain', () => {
+  const m = makeMatch(21);
+  m.startRound();
+  const t = m.terrain, gy = 500;
+  t.mask.fill(AIR);
+  for (let x = 0; x < WORLD_W; x++) for (let y = gy; y < WORLD_H; y++) t.mask[y * t.w + x] = ROCK;
+  for (let x = 800; x < 880; x++) for (let y = gy - 160; y < gy; y++) t.mask[y * t.w + x] = BRICK;
+  t._hasBrick = true;
+  t.recalcTop(0, WORLD_W - 1);
+  m.phase = 'flight';
+  m.explode(840, gy - 6, 40, 0, 0, null);
+  assert(m.rubble.length > 0, 'explosion at the base should spawn rubble');
+  let guard = 0;
+  while (m.rubble.length && guard++ < 20000) m.step(SIM_DT);
+  assert(guard < 20000, 'rubble should settle');
+  // landed rubble is terrain again: brick present at/above the ground line
+  let restamped = 0;
+  for (let x = 760; x < 920; x++) {
+    for (let y = gy - 220; y < gy + 60; y++) if (t.mask[y * t.w + x] === BRICK) restamped++;
+  }
+  assert(restamped > 1500, `landed rubble should re-stamp as brick (${restamped})`);
+  m.drainEvents();
+});
+
 console.log('match basics');
 function makeMatch(seed = 42, players) {
   return new Match({

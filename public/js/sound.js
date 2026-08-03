@@ -566,6 +566,14 @@ export class Sound {
         case 'battery': this.battery(); break;
         case 'dirt': this.dirt(); break;
         case 'buriedFire': this.explosion(0.7, false, 'dust'); break;
+        case 'shatter':
+          // masonry cracking loose: a dry snap, lower for bigger breaks
+          this.blip(300 - Math.min(120, e.n * 4), 0.09, 'square', 0.22, 140);
+          break;
+        case 'rubbleLand':
+          // weighty thud scaled by the size of the landed section
+          this.blip(90, 0.12, 'sine', Math.min(0.4, 0.14 + e.area / 4000), 40);
+          break;
         case 'strikeStamp':
           // rubber-stamp KA-CHUNK
           this.blip(180, 0.07, 'square', 0.3, 90);
