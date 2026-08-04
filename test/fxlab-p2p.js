@@ -2,6 +2,7 @@
 
 import puppeteer from 'puppeteer-core';
 import { mkdirSync } from 'fs';
+import { WEAPONS } from '../public/js/config.js';
 
 const SHOTS = process.env.SHOTS_DIR || '/tmp/scorch-fxlab';
 mkdirSync(SHOTS, { recursive: true });
@@ -27,7 +28,7 @@ const lab = await page.evaluate(() => ({
   deathBtns: document.querySelectorAll('#fx-deaths .fx-btn').length,
 }));
 console.log('LAB:', JSON.stringify(lab));
-if (!lab.panel || lab.weaponBtns !== 21 || lab.deathBtns !== 7) errors.push('lab layout wrong: ' + JSON.stringify(lab));
+if (!lab.panel || lab.weaponBtns !== WEAPONS.length || lab.deathBtns !== 7) errors.push('lab layout wrong: ' + JSON.stringify(lab));
 
 // fire a missile, check debris chunks fly (nukes vaporize instead)
 await page.evaluate(() => {

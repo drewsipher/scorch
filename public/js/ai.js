@@ -197,7 +197,7 @@ const SHOP_PLANS = {
   },
   mid: {
     reserve: 4000,
-    list: ['missile', 'shield', 'parachute', 'roller', 'sidewinder', 'napalm', 'battery', 'baby_nuke', 'leapfrog'],
+    list: ['missile', 'shield', 'parachute', 'roller', 'shockwave', 'sidewinder', 'napalm', 'battery', 'baby_nuke', 'leapfrog'],
   },
   smart: {
     reserve: 5000,

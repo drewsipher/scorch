@@ -558,9 +558,19 @@ export class Sound {
         case 'explosion': {
           const dustyW = ['dirt_clod', 'ton_of_dirt', 'digger', 'sandhog'];
           const flavor = dustyW.includes(e.weapon) ? 'dust' : e.weapon === 'funky_bomb' ? 'funky' : null;
-          this.explosion(Math.min(e.r / 50, 2.2), e.nuke, flavor);
+          const direct = e.direct != null;
+          this.explosion(Math.min(e.r / 50, 2.2) * (direct ? 1.35 : 1), e.nuke, flavor);
+          if (direct) {
+            // armor clang on a square hull hit
+            this.blip(520, 0.06, 'square', 0.22, 200);
+            this.blip(160, 0.14, 'sine', 0.26, 70, this.ctx.currentTime + 0.03);
+          }
           break;
         }
+        case 'knockback':
+          // concussion whoosh
+          this.blip(140, 0.18, 'sine', 0.2, 45);
+          break;
         case 'shieldHit': this.zap(); break;
         case 'shieldDown': this.shieldDown(); break;
         case 'battery': this.battery(); break;

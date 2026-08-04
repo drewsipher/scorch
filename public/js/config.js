@@ -24,6 +24,7 @@ export const WEAPONS = [
   { id: 'missile', name: 'Missile', type: 'shell', blast: 42, dmg: 52, price: 1875, qty: 5, trail: '#ffd28a', desc: 'A serious step up in yield.' },
   { id: 'baby_nuke', name: 'Baby Nuke', type: 'shell', blast: 72, dmg: 86, price: 7000, qty: 3, trail: '#b8ff9e', nukeFlash: true, desc: 'Pocket-sized apocalypse.' },
   { id: 'nuke', name: 'Nuke', type: 'shell', blast: 110, dmg: 135, price: 12000, qty: 1, trail: '#7dff9a', nukeFlash: true, desc: 'City-block eraser. Handle with pride.' },
+  { id: 'shockwave', name: 'Shockwave Shell', type: 'shell', blast: 30, dmg: 18, knockback: 130, price: 4000, qty: 4, trail: '#9adcff', desc: 'Low yield, huge concussion — hurls tanks off their footing.' },
   { id: 'leapfrog', name: 'Leapfrog', type: 'leapfrog', blast: 34, dmg: 40, bounces: 3, price: 5000, qty: 2, trail: '#8ef2b0', desc: 'Detonates, hops onward, detonates again. x3.' },
   { id: 'funky_bomb', name: 'Funky Bomb', type: 'funky', blast: 30, dmg: 34, bomblets: 7, price: 7000, qty: 2, trail: '#ff9af5', desc: 'Scatters a fistful of party favors.' },
   { id: 'mirv', name: 'MIRV', type: 'mirv', blast: 34, dmg: 45, warheads: 5, price: 10000, qty: 3, trail: '#ffb3c8', desc: 'Splits at apogee into five warheads.' },

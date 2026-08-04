@@ -139,6 +139,75 @@ test('rubble falls, lands, and re-stamps as terrain', () => {
   m.drainEvents();
 });
 
+console.log('combat feel');
+test('direct hit deals full yield: 4 shells kill a fresh tank', () => {
+  const m = makeMatch(29);
+  m.startRound();
+  const target = m.tanks[1];
+  const shell = WEAPON_BY_ID.shell;
+  let hits = 0;
+  while (target.alive && hits < 10) {
+    m.phase = 'flight';
+    m.explode(target.x, target.y - 10, shell.blast, shell.dmg, 0, shell, target);
+    m.resolveDeaths();
+    hits++;
+  }
+  assert(hits <= 4, `direct shell hits to kill should be <= 4, took ${hits}`);
+  assert(hits >= 3, `shells should not one-shot (took ${hits})`);
+});
+
+test('shockwave shoves tanks back and deals light damage', () => {
+  const m = makeMatch(31);
+  m.startRound();
+  const target = m.tanks[1];
+  const x0 = target.x, hp0 = target.hp;
+  m.phase = 'flight';
+  const sw = WEAPON_BY_ID.shockwave;
+  m.explode(target.x - 45, target.y - 8, sw.blast, sw.dmg, 0, sw);
+  assert(target.x > x0 + 8, `tank should be knocked away (${x0} -> ${target.x})`);
+  assert(target.hp < hp0, 'concussion still stings');
+  assert(target.hp > hp0 - 30, 'but it is not a killer');
+});
+
+test('airstrike laser stops at the first ridge (no tunneling)', () => {
+  const m = makeMatch(33);
+  m.startRound();
+  const t = m.terrain;
+  t.mask.fill(AIR);
+  for (let x = 0; x < WORLD_W; x++) for (let y = 500; y < WORLD_H; y++) t.mask[y * t.w + x] = ROCK;
+  for (let x = 1000; x < 1014; x++) for (let y = 380; y < 500; y++) t.mask[y * t.w + x] = ROCK;
+  t.recalcTop(0, WORLD_W - 1);
+  m.tanks[0].x = 800; m.tanks[0].y = 500;
+  m.tanks[1].x = 200; m.tanks[1].y = 500;
+  m.phase = 'flight';
+  // aim up-right so the ray meets the wall face
+  m.castStrikeBeam(0, 800, 480, Math.atan2(80, 200));
+  const beam = m.projectiles.find(p => p.kind === 'beam');
+  assert(beam, 'beam spawned');
+  assert(beam.tx >= 995 && beam.tx <= 1016, `strike should land on the ridge, got x=${beam.tx}`);
+  m.projectiles = [];
+});
+
+test('airstrike graze designates the skimmed crest, not the far edge', () => {
+  const m = makeMatch(35);
+  m.startRound();
+  const t = m.terrain;
+  t.mask.fill(AIR);
+  for (let x = 0; x < WORLD_W; x++) for (let y = 500; y < WORLD_H; y++) t.mask[y * t.w + x] = ROCK;
+  // a mound cresting at y=490, beam passes ~20px above it
+  for (let x = 980; x < 1040; x++) for (let y = 490; y < 500; y++) t.mask[y * t.w + x] = ROCK;
+  t.recalcTop(0, WORLD_W - 1);
+  m.tanks[0].x = 700; m.tanks[0].y = 500;
+  m.tanks[1].x = 200; m.tanks[1].y = 500;
+  m.phase = 'flight';
+  m.castStrikeBeam(0, 700, 470, 0);   // dead horizontal to the right
+  const beam = m.projectiles.find(p => p.kind === 'beam');
+  assert(beam, 'beam spawned');
+  assert(beam.tx >= 975 && beam.tx <= 1045, `strike should snap to the grazed crest, got x=${beam.tx}`);
+  assert(beam.tx < WORLD_W - 60, 'must not select the opposite side of the map');
+  m.projectiles = [];
+});
+
 console.log('match basics');
 function makeMatch(seed = 42, players) {
   return new Match({

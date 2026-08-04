@@ -297,8 +297,10 @@ export class Match {
     const bx = t.x + Math.cos(a) * MUZZLE_LEN;
     const by = t.y - MUZZLE_PIVOT_DY - Math.sin(a) * MUZZLE_LEN;
     // firing while buried blasts an exit hole — and scorches your own hull.
-    // Repeated shots dig you out, at a price.
-    if (this.terrain.solid(bx, by)) {
+    // Repeated shots dig you out, at a price. (Not the laser designator: the
+    // carve used to blow a hole through thin ridges and let the beam tunnel
+    // through to paint the far side.)
+    if (this.terrain.solid(bx, by) && def.type !== 'airstrike') {
       this.terrain.carve(bx | 0, by | 0, 12);
       const buriedCenter = this.terrain.solid(t.x, t.y - TANK_HIT_DY);
       if (buriedCenter) {
@@ -331,14 +333,32 @@ export class Match {
   castStrikeBeam(ownerIdx, ox, oy, ang) {
     const dx = Math.cos(ang), dy = -Math.sin(ang);
     let x = ox, y = oy, hitY = null;
-    for (let i = 0; i < 2600; i++) {
+    let grazeX = null, grazeClear = Infinity, exitedTop = false;
+    // muzzle buried in dirt: the laser paints the dirt in your face
+    if (this.terrain.solid(x, y)) hitY = y;
+    else for (let i = 0; i < 2600; i++) {
       x += dx; y += dy;
       if (x < 2 || x > WORLD_W - 2) { x = clamp(x, 2, WORLD_W - 2); break; }
-      if (y < -420 || y > WORLD_H - 2) break;
-      if (this.tankAt(x, y, ownerIdx, 99) || this.terrain.solid(x, y)) { hitY = y; break; }
+      if (y < -420) { exitedTop = true; break; }
+      if (y > WORLD_H - 2) break;
+      // exclude the shooter only while the beam is still leaving the barrel
+      if (this.tankAt(x, y, ownerIdx, i < 40 ? 0 : 99) || this.terrain.solid(x, y)) { hitY = y; break; }
+      // remember the crest the beam skims closest over (once clear of the muzzle)
+      if (i > 40 && y >= 0) {
+        const clear = this.terrain.topY(x | 0) - y;
+        if (clear >= 0 && clear < grazeClear) { grazeClear = clear; grazeX = x; }
+      }
     }
-    const tx = clamp(x, 10, WORLD_W - 10);
-    const ty = hitY ?? this.terrain.topY(tx | 0);
+    let tx, ty;
+    if (hitY !== null) {
+      tx = clamp(x, 10, WORLD_W - 10); ty = hitY;
+    } else if (!exitedTop && grazeX !== null && grazeClear < 48) {
+      // the ray only grazed over a ridge — that ridge is what the gunner meant
+      tx = clamp(grazeX, 10, WORLD_W - 10); ty = this.terrain.topY(tx | 0);
+    } else {
+      // beam left the map: the strike rains down where it departed
+      tx = clamp(x, 10, WORLD_W - 10); ty = this.terrain.topY(tx | 0);
+    }
     this.spawnProjectile({
       weapon: 'airstrike', owner: ownerIdx, kind: 'beam',
       x: ox, y: oy, vx: 0, vy: 0,
@@ -602,7 +622,7 @@ export class Match {
 
       case 'napalm': {
         this.spawnNapalm(p, def);
-        this.explode(p.x, p.y, def.blast * 0.7, def.dmg * 0.5, p.owner, def);
+        this.explode(p.x, p.y, def.blast * 0.7, def.dmg * 0.5, p.owner, def, hitTank);
         return true;
       }
       case 'dirt': {
@@ -614,7 +634,7 @@ export class Match {
         return true;
       }
       case 'leapfrog': {
-        this.explode(p.x, p.y, def.blast, def.dmg, p.owner, def);
+        this.explode(p.x, p.y, def.blast, def.dmg, p.owner, def, hitTank);
         if (p.bounces > 0) {
           this.spawnProjectile({
             weapon: p.weapon, owner: p.owner,
@@ -626,7 +646,7 @@ export class Match {
         return true;
       }
       case 'funky': {
-        this.explode(p.x, p.y, def.blast, def.dmg, p.owner, def);
+        this.explode(p.x, p.y, def.blast, def.dmg, p.owner, def, hitTank);
         const rng = makeRng((this.roundSeed ^ (p.id * 104729)) >>> 0);
         for (let i = 0; i < def.bomblets; i++) {
           this.spawnProjectile({
@@ -641,7 +661,7 @@ export class Match {
         return true;
       }
       case 'sidewinder': {
-        this.explode(p.x, p.y, def.blast, def.dmg, p.owner, def);
+        this.explode(p.x, p.y, def.blast, def.dmg, p.owner, def, hitTank);
         const rng = makeRng((this.roundSeed ^ (p.id * 60493)) >>> 0);
         if (this.projectiles.length < 70) {
           for (let i = 0; i < 12; i++) {
@@ -667,7 +687,7 @@ export class Match {
           this.emit({ type: 'nukeballStart', x: p.x, y: p.y, r: def.blast });
           return true;
         }
-        this.explode(p.x, p.y, def.blast, def.dmg, p.owner, def);
+        this.explode(p.x, p.y, def.blast, def.dmg, p.owner, def, hitTank);
         return true;
       }
     }
@@ -701,7 +721,7 @@ export class Match {
     p.y = nextY;
     // tank contact?
     const hit = this.tankAt(p.x, p.y - 3, p.owner, 99);
-    if (hit) { this.explode(p.x, p.y, def.blast, def.dmg, p.owner, def); return true; }
+    if (hit) { this.explode(p.x, p.y, def.blast, def.dmg, p.owner, def, hit); return true; }
     return false;
   }
 
@@ -716,7 +736,7 @@ export class Match {
     if (this.terrain.solid(p.x, p.y)) this.terrain.carve(p.x | 0, p.y | 0, p.digR || 11);
     const hit = this.tankAt(p.x, p.y, p.owner, 99);
     if (hit || p.tunnelLeft <= 0 || p.x < 2 || p.x > WORLD_W - 2 || p.y > WORLD_H - 2 || p.y < -30) {
-      this.explode(p.x, p.y, def.blast, def.dmg, p.owner, def);
+      this.explode(p.x, p.y, def.blast, def.dmg, p.owner, def, hit);
       return true;
     }
     return false;
@@ -784,7 +804,7 @@ export class Match {
     if (alive.length === 0) this.emit({ type: 'napalmEnd' });
   }
 
-  explode(x, y, radius, maxDmg, ownerIdx, def) {
+  explode(x, y, radius, maxDmg, ownerIdx, def, directTank = null) {
     x = clamp(x, 0, WORLD_W - 1); y = Math.min(y, WORLD_H - 1);
     const owner = this.tanks[ownerIdx] ?? null;
     // damage tanks (before terrain settle so proximity is measured against blast point)
@@ -792,9 +812,24 @@ export class Match {
       if (!t.alive) continue;
       const d = Math.hypot(t.x - x, (t.y - TANK_HIT_DY) - y);
       const reach = radius + 22;   // blast reaches the wide hull
-      if (d < reach) {
-        const dmg = maxDmg * clamp(1 - d / reach, 0, 1) ** 0.8;
-        if (dmg > 1) this.damageTank(t, dmg, owner);
+      let dmg = d < reach ? maxDmg * clamp(1 - d / reach, 0, 1) ** 0.8 : 0;
+      // square on the hull: the warhead dumps its full yield into the armor
+      if (t === directTank) dmg = Math.max(dmg, maxDmg * 1.15);
+      if (dmg > 1) this.damageTank(t, dmg, owner);
+    }
+    // concussion weapons hurl tanks off their footing
+    if (def && def.knockback) {
+      const kReach = radius * 2.6 + 24;
+      for (const t of this.tanks) {
+        if (!t.alive) continue;
+        const d = Math.hypot(t.x - x, (t.y - TANK_HIT_DY) - y);
+        if (d >= kReach) continue;
+        const dir = t.x >= x ? 1 : -1;
+        const dist = Math.round(def.knockback * clamp(1 - d / kReach, 0, 1) ** 0.7);
+        if (dist > 2) {
+          this.pushTank(t, dir, dist);
+          this.emit({ type: 'knockback', tank: t.index, dir, dist });
+        }
       }
     }
     this.terrain.carve(x | 0, y | 0, radius | 0);
@@ -828,7 +863,26 @@ export class Match {
       }
     }
     this.tanksFall();
-    this.emit({ type: 'explosion', x, y, r: radius, weapon: def ? def.id : null, nuke: !!(def && def.nukeFlash) });
+    this.emit({
+      type: 'explosion', x, y, r: radius, weapon: def ? def.id : null,
+      nuke: !!(def && def.nukeFlash), direct: directTank ? directTank.index : null,
+    });
+  }
+
+  // Shove a tank along the ground: climbs gentle slopes, stops at steep walls,
+  // and leaves cliff drops to tanksFall (so parachutes and fall rules apply).
+  pushTank(t, dir, dist) {
+    let x = t.x, y = t.y;
+    for (let i = 0; i < dist; i++) {
+      const nx = x + dir;
+      if (nx < 8 || nx > WORLD_W - 8) break;
+      const ny = this.terrain.topY(nx | 0);
+      if (ny < y - 14) break;          // wall too steep to be blown up
+      x = nx;
+      if (ny < y) y = ny;              // ride up slopes; never descend mid-shove
+    }
+    t.x = x;
+    t.y = y;
   }
 
   // ---- Brittle collapse: crack surrounding brick free and drop it ----

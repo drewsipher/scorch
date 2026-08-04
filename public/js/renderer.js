@@ -196,7 +196,38 @@ export class Renderer {
           this.setTheme(match.theme, match.roundSeed);
           if (match.terrain && !match.terrain.canvas) match.terrain.attachGfx(match.theme, match.roundSeed);
           break;
-        case 'explosion': this.fxExplosion(e.x, e.y, e.r, e.nuke, e.weapon, match); break;
+        case 'explosion': {
+          this.fxExplosion(e.x, e.y, e.r, e.nuke, e.weapon, match);
+          if (e.direct != null) {
+            // square hull hit: extra violence + a callout
+            this.shakeIt(Math.min(20, 8 + e.r * 0.2));
+            this.flash = Math.min(1, this.flash + 0.25);
+            this.punch = Math.min((this.punch || 0) + 0.03, 0.09);
+            this.fxText(e.x, e.y - 52, 'DIRECT HIT!', '#ffd24d');
+            for (let i = 0; i < 16; i++) {
+              const a2 = Math.random() * TAU, sp2 = 120 + Math.random() * 260;
+              this.particles.push({
+                kind: 'debris', x: e.x, y: e.y - 8,
+                vx: Math.cos(a2) * sp2, vy: Math.sin(a2) * sp2 - 60,
+                life: 0.7 + Math.random() * 0.5, t: 0, sz: 1.6 + Math.random() * 1.8,
+                col: i % 3 ? '255,210,77' : '255,255,255',
+              });
+            }
+          }
+          break;
+        }
+        case 'knockback': {
+          // dust skid trailing the shoved tank
+          const t = match.tanks[e.tank];
+          for (let i = 0; i < Math.min(12, 4 + e.dist / 12); i++) {
+            this.particles.push({
+              kind: 'puff', x: t.x - e.dir * (6 + Math.random() * e.dist * 0.7), y: t.y - 2,
+              vx: -e.dir * (20 + Math.random() * 40), vy: -8 - Math.random() * 20,
+              life: 0.7, t: 0, sz: 2 + Math.random() * 2, col: '170,158,140',
+            });
+          }
+          break;
+        }
         case 'fire': this.fxMuzzle(match.tanks[e.tank]); break;
         case 'mirvSplit': this.fxSpark(e.x, e.y, 14, '#ffffff'); break;
         case 'dirt': this.fxDirt(e.x, e.y, e.r); break;

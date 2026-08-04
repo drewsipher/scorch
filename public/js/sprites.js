@@ -313,6 +313,17 @@ export function buildIcon(id) {
       px(g, 3, 6, '#5a6273'); px(g, 3, 8, '#5a6273');
       px(g, 5, 6, '#ffffff');
       break;
+    case 'shockwave':
+      // stubby shell wrapped in concussion rings
+      rect(g, 5, 6, 4, 3, '#8a92a3');
+      px(g, 9, 6, '#c9d2df'); px(g, 9, 7, '#e8e8e8'); px(g, 9, 8, '#c9d2df');
+      px(g, 10, 7, '#ffffff');
+      // radiating arcs left and right
+      px(g, 3, 5, '#9adcff'); px(g, 2, 7, '#9adcff'); px(g, 3, 9, '#9adcff');
+      px(g, 1, 4, '#5fb8e8'); px(g, 0, 7, '#5fb8e8'); px(g, 1, 10, '#5fb8e8');
+      px(g, 11, 4, '#9adcff'); px(g, 12, 7, '#9adcff'); px(g, 11, 10, '#9adcff');
+      px(g, 13, 5, '#5fb8e8'); px(g, 13, 9, '#5fb8e8');
+      break;
     case 'sidewinder':
       // wavy green serpent-missile
       px(g, 2, 9, '#6a9c3f'); px(g, 3, 8, '#9fc46a'); px(g, 4, 7, '#9fc46a');
