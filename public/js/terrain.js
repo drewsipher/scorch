@@ -484,17 +484,32 @@ export class Terrain {
     }
     if (marks.size === 0) return [];
 
-    // partition into chunks on a jittered grid (bigger chunks for big collapses)
-    const cs = marks.size > 14000 ? 30 : marks.size > 4000 ? 20 : 13;
+    // partition into chunks on a deterministic quadtree: every break yields a
+    // mix of massive slabs (64px), mid blocks, and pebbles (down to 4px). Stop
+    // probabilities are tuned by collapse size so huge collapses lean chunky
+    // instead of drowning the sim in gravel.
+    const sizeSeed = (Math.imul(cx + 1, 2246822519) ^ Math.imul(cy + 1, 3266489917) ^ Math.imul(r + 1, 668265263)) >>> 0;
+    const h32 = (a, b) => {
+      let hh = sizeSeed ^ Math.imul(a + 0x9e37, 2654435761) ^ Math.imul(b + 0x85eb, 40503);
+      hh = Math.imul(hh ^ (hh >>> 15), 2246822519);
+      return (hh ^ (hh >>> 13)) >>> 0;
+    };
+    const big = marks.size > 12000, mid = !big && marks.size > 3000;
+    // chance to settle at leaf size 64/32/16/8 (1 = floor for this class)
+    const stops = big ? [0.35, 0.5, 1, 1] : mid ? [0.18, 0.3, 0.5, 1] : [0.10, 0.22, 0.45, 0.65];
+    const leafOf = (x, y) => {
+      for (let li = 0; li < 4; li++) {
+        const k = 6 - li;
+        if ((h32((x >> k) + (k << 20), y >> k) & 0xffff) / 0x10000 < stops[li]) {
+          return (k << 28) | ((x >> k) << 14) | (y >> k);
+        }
+      }
+      return (2 << 28) | ((x >> 2) << 14) | (y >> 2);   // 4px pebbles
+    };
     const groups = new Map();
     for (const i of marks) {
       const x = i % w, y = (i / w) | 0;
-      const gy = (y / cs) | 0;
-      // per-row horizontal offset breaks the vertical seams into brickwork
-      let hsh = Math.imul(gy ^ 0x9e3779b9, 2654435761);
-      hsh = (hsh ^ (hsh >>> 13)) >>> 0;
-      const gx = ((x + (hsh % cs)) / cs) | 0;
-      const key = gy * 8192 + gx;
+      const key = leafOf(x, y);
       let g = groups.get(key);
       if (!g) { g = []; groups.set(key, g); }
       g.push(i);
@@ -529,6 +544,29 @@ export class Terrain {
     this.recalcTop(Math.max(0, minX - 1), Math.min(w - 1, maxX + 1));
     this.markDirty(Math.max(0, minX - 1), 0, Math.min(w - 1, maxX + 1));
     return chunks;
+  }
+
+  // Overflow valve for the rubble cap: dissolve a would-be chunk into colored
+  // sand in place so terrain never silently vanishes.
+  spillChunk(chunk) {
+    const w = this.w, h = this.h, m = this.mask;
+    const sc = this.texture ? this.ensureSandColor() : null;
+    for (let py = 0; py < chunk.h; py++) {
+      const wy = chunk.y0 + py;
+      if (wy < 0 || wy >= h) continue;
+      for (let px = 0; px < chunk.w; px++) {
+        if (!chunk.cells[py * chunk.w + px]) continue;
+        const wx = chunk.x0 + px;
+        if (wx < 0 || wx >= w) continue;
+        const i = wy * w + wx;
+        if (m[i] !== AIR) continue;
+        m[i] = SAND;
+        if (sc) sc[i] = chunk.colors[py * chunk.w + px];
+      }
+    }
+    this.recalcTop(Math.max(0, chunk.x0 - 1), Math.min(w - 1, chunk.x0 + chunk.w + 1));
+    this.markDirty(Math.max(0, chunk.x0 - 1), 0, Math.min(w - 1, chunk.x0 + chunk.w + 1));
+    this.activate(chunk.x0 - 4, chunk.x0 + chunk.w + 4, Math.max(0, chunk.y0 - 10), h - 1);
   }
 
   // Re-stamp a landed rubble chunk into the world (still brittle, still its

@@ -837,7 +837,11 @@ export class Match {
     if (!chunks.length) return;
     const rng = makeRng((this.roundSeed ^ Math.imul((x | 0) + 31, 668265263) ^ Math.imul((y | 0) + 17, 2246822519)) >>> 0);
     for (const c of chunks) {
-      if (this.rubble.length >= 160) break;
+      if (this.rubble.length >= 240) {
+        // past the cap the leftovers crumble to colored sand — never vanish
+        this.terrain.spillChunk(c);
+        continue;
+      }
       // bottom profile per column: lowest solid pixel (for landing tests)
       const bottom = new Int16Array(c.w).fill(-1);
       for (let px = 0; px < c.w; px++) {
@@ -845,10 +849,13 @@ export class Match {
           if (c.cells[py * c.w + px]) { bottom[px] = py; break; }
         }
       }
+      // pebbles fly, slabs mostly drop: scatter energy scales inversely with mass
+      const kick = 1 / Math.sqrt(c.area + 4);
       this.rubble.push({
         ...c, bottom, ownerIdx,
         fx: c.x0, fy: c.y0,
-        vx: rng.range(-12, 12), vy: rng.range(-30, 0),
+        vx: rng.range(-1, 1) * (10 + 90 * kick),
+        vy: rng.range(-1, 0) * (20 + 130 * kick),
         // near chunks give way first; the rest crack loose a beat later
         delay: rng.range(0.05, 0.4),
       });

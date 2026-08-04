@@ -90,6 +90,10 @@ test('destroying the foundation collapses the whole tower', () => {
   const chunks = t.fractureAt(840, gy, 70);
   const dropped = chunks.reduce((s, c) => s + c.area, 0);
   assert(dropped > 6000, `most of the tower should break free (got ${dropped}px)`);
+  // pieces range from massive slabs to pebbles
+  const areas = chunks.map(c => c.area);
+  assert(Math.max(...areas) >= 900, `expected a massive slab (max ${Math.max(...areas)})`);
+  assert(Math.min(...areas) <= 30, `expected pebbles too (min ${Math.min(...areas)})`);
   // nothing brittle should remain floating above the crater
   let leftover = 0;
   for (let x = 800; x < 880; x++) {
