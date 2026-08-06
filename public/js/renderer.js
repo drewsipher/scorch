@@ -251,6 +251,30 @@ export class Renderer {
           this.fxText(t.x, t.y - 44, 'chute!', '#cfe8ff');
           break;
         }
+        case 'thud': {
+          // hard landing: dust burst + shake scaled by the drop
+          const t = match.tanks[e.tank];
+          this.shakeIt(Math.min(10, 3 + e.dist / 40));
+          for (let i = 0; i < Math.min(14, 5 + e.dist / 24); i++) {
+            this.particles.push({
+              kind: 'puff', x: t.x + (Math.random() - 0.5) * 34, y: t.y - 2,
+              vx: (Math.random() - 0.5) * 60, vy: -12 - Math.random() * 26,
+              life: 0.8, t: 0, sz: 2 + Math.random() * 2.2, col: '165,150,130',
+            });
+          }
+          break;
+        }
+        case 'chuteLand': {
+          const t = match.tanks[e.tank];
+          for (let i = 0; i < 5; i++) {
+            this.particles.push({
+              kind: 'puff', x: t.x + (Math.random() - 0.5) * 22, y: t.y - 2,
+              vx: (Math.random() - 0.5) * 24, vy: -8 - Math.random() * 12,
+              life: 0.6, t: 0, sz: 1.8 + Math.random() * 1.6, col: '170,160,145',
+            });
+          }
+          break;
+        }
         case 'tankExplode': this.fxDebris(e.x, e.y, match.tanks[e.tank].color); break;
         case 'deathDud': {
           // the saddest explosion in the game
@@ -919,6 +943,34 @@ export class Renderer {
       ctx.globalCompositeOperation = 'source-over';
     }
     ctx.restore();
+
+    // parachute canopy while drifting down (drawn well above the nameplate)
+    if (t.chuteOut) {
+      ctx.save();
+      const cw = 74 * z, chH = 30 * z;
+      const cy = y - 108 * z + Math.sin(this.time * 3 + t.index) * 3 * z;
+      const sway = Math.sin(this.time * 2.2 + t.index) * 4 * z;
+      ctx.imageSmoothingEnabled = false;
+      // shroud lines first, so the canopy caps them
+      ctx.strokeStyle = 'rgba(220,220,230,0.85)';
+      ctx.lineWidth = Math.max(1, 1.4 * z);
+      ctx.beginPath();
+      ctx.moveTo(x + sway - cw / 2 + 2 * z, cy + chH * 0.8); ctx.lineTo(x - 12 * z, y - 20 * z);
+      ctx.moveTo(x + sway + cw / 2 - 2 * z, cy + chH * 0.8); ctx.lineTo(x + 12 * z, y - 20 * z);
+      ctx.moveTo(x + sway, cy + chH * 0.9); ctx.lineTo(x, y - 22 * z);
+      ctx.stroke();
+      // canopy: chunky striped half-dome
+      for (let i = 0; i < 6; i++) {
+        ctx.fillStyle = i % 2 ? '#e8e4d8' : (t.color || '#ff8a5c');
+        const sx0 = -cw / 2 + (cw / 6) * i;
+        const hh = chH * (0.55 + 0.45 * Math.sin((i + 0.5) / 6 * Math.PI));
+        ctx.fillRect(Math.round(x + sway + sx0), Math.round(cy), Math.ceil(cw / 6), Math.round(hh));
+      }
+      // dark top seam
+      ctx.fillStyle = '#10121c';
+      ctx.fillRect(Math.round(x + sway - cw / 2), Math.round(cy - 2 * z), Math.round(cw), Math.max(1, 2 * z));
+      ctx.restore();
+    }
 
     // exhaust puffs while this tank is aiming (idling engine)
     if (isCurrent) {

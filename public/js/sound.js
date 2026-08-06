@@ -618,6 +618,9 @@ export class Sound {
           this.whoosh(this.ctx.currentTime, 2600, 500, 0.22, 0.9, 0.7);
           break;
         case 'parachute': this.parachute(); break;
+        case 'thud':
+          this.blip(70, 0.13, 'sine', Math.min(0.4, 0.16 + e.dist / 900), 34);
+          break;
         case 'turnStart': this.turn(); break;
         case 'deathBuildup': this.buildupWhine(e.duration); break;
         case 'deathDud': this.pffrt(); break;

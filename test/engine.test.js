@@ -208,6 +208,77 @@ test('airstrike graze designates the skimmed crest, not the far edge', () => {
   m.projectiles = [];
 });
 
+console.log('falling');
+function cliffWorld(m) {
+  // tank standing on a high plinth over deep ground
+  const t = m.terrain;
+  t.mask.fill(AIR);
+  for (let x = 0; x < WORLD_W; x++) for (let y = 700; y < WORLD_H; y++) t.mask[y * t.w + x] = ROCK;
+  for (let x = 780; x < 900; x++) for (let y = 400; y < 700; y++) t.mask[y * t.w + x] = ROCK;
+  t.recalcTop(0, WORLD_W - 1);
+  const tank = m.tanks[1];
+  tank.x = 840; tank.y = 400;
+  m.tanks[0].x = 200; m.tanks[0].y = 700;
+  return tank;
+}
+
+test('tanks fall with animation, not teleport', () => {
+  const m = makeMatch(41);
+  m.startRound();
+  const tank = cliffWorld(m);
+  m.phase = 'flight';
+  // vaporize the plinth
+  for (let x = 780; x < 900; x++) for (let y = 400; y < 700; y++) m.terrain.mask[y * m.terrain.w + x] = 0;
+  m.terrain.recalcTop(770, 910);
+  m.tanksFall();
+  assert(tank.falling, 'tank should enter falling state');
+  m.step(SIM_DT);
+  assert(tank.y < 460, `one tick in, still near the top (y=${tank.y})`);
+  let guard = 0;
+  while (tank.falling && guard++ < 5000) m.step(SIM_DT);
+  assert(guard < 5000, 'fall should finish');
+  assert(Math.abs(tank.y - 700) < 3, `should land on the ground (y=${tank.y})`);
+  assert(tank.hp < 100, 'a 300px drop must hurt');
+  m.drainEvents();
+});
+
+test('parachute deploys mid-fall and prevents damage', () => {
+  const m = makeMatch(43);
+  m.startRound();
+  const tank = cliffWorld(m);
+  tank.items.parachute = 1;
+  m.phase = 'flight';
+  for (let x = 780; x < 900; x++) for (let y = 400; y < 700; y++) m.terrain.mask[y * m.terrain.w + x] = 0;
+  m.terrain.recalcTop(770, 910);
+  m.tanksFall();
+  let sawChute = false, guard = 0;
+  while (tank.falling && guard++ < 8000) {
+    m.step(SIM_DT);
+    if (tank.chuteOut) sawChute = true;
+  }
+  assert(sawChute, 'chute should deploy mid-air');
+  assert.equal(tank.items.parachute, 0, 'chute consumed');
+  assert.equal(tank.hp, 100, 'gentle landing: no damage');
+  assert(m.drainEvents().some(e => e.type === 'parachute'), 'parachute event emitted');
+});
+
+test('a lethal fall triggers the death sequence', () => {
+  const m = makeMatch(47);
+  m.startRound();
+  const tank = cliffWorld(m);
+  tank.hp = 20;
+  m.phase = 'flight';
+  for (let x = 780; x < 900; x++) for (let y = 400; y < 700; y++) m.terrain.mask[y * m.terrain.w + x] = 0;
+  m.terrain.recalcTop(770, 910);
+  m.tanksFall();
+  let guard = 0;
+  while (tank.falling && guard++ < 5000) m.step(SIM_DT);
+  assert(!tank.alive, 'the fall should be lethal');
+  assert(m.dying.some(d => d.tank === tank), 'death sequence (buildup + boom) should run');
+  m.resolveDeaths();
+  m.drainEvents();
+});
+
 console.log('match basics');
 function makeMatch(seed = 42, players) {
   return new Match({
@@ -604,6 +675,7 @@ test('digging under a buried tank drops it into the cavity', () => {
   m.terrain.carve(t.x | 0, (t.y + 40) | 0, 38);
   m.terrain.active = [];   // keep the cavity open for the assertion
   m.tanksFall();
+  m.settleFalls();
   assert(t.y > yBefore + 20, `buried tank should drop into the cavity (fell ${t.y - yBefore}px)`);
 });
 

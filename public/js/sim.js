@@ -39,6 +39,10 @@ export class Tank {
     this.aiMemory = null;               // per-round learning state
     this.lastDamager = null;
     this.hangTime = 0;                  // cartoon hangtime after a nuke vaporizes the ground
+    this.falling = false;               // animated freefall in progress
+    this.fallVy = 0;
+    this.fallStart = 0;
+    this.chuteOut = false;
   }
 
   hasWeapon(id) { return (this.weapons[id] || 0) > 0; }
@@ -160,6 +164,9 @@ export class Match {
       t.aiMemory = {};
       t.lastDamager = null;
       t.hangTime = 0;
+      t.falling = false;
+      t.fallVy = 0;
+      t.chuteOut = false;
       t.roundDmg = 0;
       t.roundKills = 0;
       // auto-arm shield if owned
@@ -383,6 +390,7 @@ export class Match {
     this.stepNapalm(dt);
     this.stepRubble(dt);
     this.stepDying(dt);
+    this.stepFalling(dt);
     // cartoon hangtime expires -> gravity notices
     let hangDone = false;
     for (const t of this.tanks) {
@@ -404,8 +412,8 @@ export class Match {
     }
     // end of flight?
     const entitiesDone = this.projectiles.length === 0 && this.napalm.length === 0 &&
-      this.rubble.length === 0 &&
-      this.dying.length === 0 && !this.tanks.some(t => t.hangTime > 0);
+      this.rubble.length === 0 && this.dying.length === 0 &&
+      !this.tanks.some(t => t.hangTime > 0 || t.falling);
     if (entitiesDone && this.terrain.settling()) {
       // give the pour a moment of screen time, then snap the stragglers home
       this._settleGrace = (this._settleGrace || 0) + dt;
@@ -421,6 +429,7 @@ export class Match {
       if (!this.checkRoundOver()) this.nextTurn();
     } else if (this.flightTime > 60) {
       // safety: clear stuck entities
+      this.settleFalls();
       this.rubble = [];
       this.projectiles = [];
       this.napalm = [];
@@ -1121,13 +1130,17 @@ export class Match {
     let g = 0;
     while ((this.dying.length || this.terrain.settling()) && g++ < 40000) {
       this.stepDying(SIM_DT);
-      if (g % 4 === 0 && this.terrain.stepSand()) this.tanksFall();
+      if (g % 4 === 0 && this.terrain.stepSand()) { this.tanksFall(); this.settleFalls(); }
     }
+    this.settleFalls();
   }
 
+  // Detect unsupported tanks. Small settles (sand trickling out from under
+  // the treads) snap instantly; real drops start an animated fall handled by
+  // stepFalling — Scorched Earth style: plummet, maybe pop a chute, land hard.
   tanksFall() {
     for (const t of this.tanks) {
-      if (!t.alive) continue;
+      if (!t.alive || t.falling) continue;
       if (t.hangTime > 0) continue;   // cartoon hangtime: not yet!
       // find real support under the tank's feet — not just the column top.
       // A buried tank must drop when the ground UNDER it is dug away, even
@@ -1142,20 +1155,73 @@ export class Match {
       if (airAt < 0) continue;   // solidly supported
       let ny = airAt;
       while (ny < this.terrain.h - 1 && !this.terrain.solid(x, ny)) ny++;
-      if (ny > t.y + 1) {
-        const dist = ny - t.y;
-        t.y = ny;
-        if (dist > FALL_GRACE && this.opt.fallDamage) {
-          if ((t.items.parachute || 0) > 0) {
-            t.items.parachute--;
-            this.emit({ type: 'parachute', tank: t.index, dist });
-          } else {
-            const dmg = (dist - FALL_GRACE) * FALL_DAMAGE_FACTOR;
-            this.damageTank(t, dmg, this.tanks[t.lastDamager ?? -1] ?? null);
-            this.emit({ type: 'thud', tank: t.index, dist });
-          }
-        }
+      if (ny <= t.y + 1) continue;
+      if (ny - t.y <= 8) {
+        t.y = ny;                      // tiny settle: no drama
+      } else {
+        t.falling = true;
+        t.fallVy = 0;
+        t.fallStart = t.y;
+        t.y = airAt;                   // release from any thin crust it punched through
       }
+    }
+  }
+
+  // Animated falling: gravity, parachute deploy past the grace window, pixel
+  // stepped descent (terrain can keep changing mid-fall), damage on landing.
+  stepFalling(dt) {
+    for (const t of this.tanks) {
+      if (!t.alive || !t.falling) continue;
+      if (!t.chuteOut && this.opt.fallDamage && (t.items.parachute || 0) > 0 &&
+          t.y - t.fallStart > FALL_GRACE) {
+        t.chuteOut = true;
+        t.items.parachute--;
+        this.emit({ type: 'parachute', tank: t.index });
+      }
+      if (t.chuteOut) {
+        t.fallVy = Math.min(t.fallVy + this.gravity * 1.7 * dt, 75);
+      } else {
+        t.fallVy += this.gravity * 1.7 * dt;
+      }
+      const x = t.x | 0;
+      let remaining = t.fallVy * dt;
+      let landed = false;
+      while (remaining > 0) {
+        const step = Math.min(1, remaining);
+        remaining -= step;
+        const ny = t.y + step;
+        if (this.terrain.solid(x, Math.ceil(ny))) { t.y = Math.ceil(ny); landed = true; break; }
+        t.y = ny;
+        if (t.y >= this.terrain.h - 1) { t.y = this.terrain.h - 1; landed = true; break; }
+      }
+      if (landed) this.landTank(t);
+    }
+  }
+
+  landTank(t) {
+    t.falling = false;
+    t.fallVy = 0;
+    const dist = t.y - t.fallStart;
+    if (t.chuteOut) {
+      t.chuteOut = false;              // chute already consumed at deploy
+      this.emit({ type: 'chuteLand', tank: t.index });
+    } else if (dist > FALL_GRACE && this.opt.fallDamage) {
+      const dmg = (dist - FALL_GRACE) * FALL_DAMAGE_FACTOR;
+      this.damageTank(t, dmg, this.tanks[t.lastDamager ?? -1] ?? null);
+      this.emit({ type: 'thud', tank: t.index, dist });
+    }
+  }
+
+  // Instant resolution for fast-forward paths (tests, flight-timeout safety):
+  // falling tanks drop straight to their landing spot with full consequences.
+  settleFalls() {
+    for (const t of this.tanks) {
+      if (!t.alive || !t.falling) continue;
+      const x = t.x | 0;
+      let ny = Math.max(0, t.y | 0);
+      while (ny < this.terrain.h - 1 && !this.terrain.solid(x, ny)) ny++;
+      t.y = ny;
+      this.landTank(t);
     }
   }
 

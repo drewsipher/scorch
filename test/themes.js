@@ -65,6 +65,7 @@ for (let i = 0; i < themeCount; i++) {
     m.terrain.compact(1125, 1275);
     m.terrain.addDirt(850, m.terrain.topY(850) - 15, 30);
     m.tanksFall();
+    m.settleFalls();
     m.drainEvents();
     return m.theme.id;
   }, i);
