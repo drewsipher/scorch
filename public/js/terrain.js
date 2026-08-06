@@ -82,7 +82,8 @@ export class Terrain {
       else if (roll < 0.18) style = 'city';
       else if (roll < 0.26) style = 'moonscape';
     }
-    if (style === 'city') { this.genCity(rng); return; }
+    if (style === 'city') { this.style = 'city'; this.genCity(rng); return; }
+    this.style = style;
 
     const styleRoll = rng();
     const base = this.h * 0.62;     // y of average surface (lower y = higher terrain)
@@ -125,6 +126,29 @@ export class Terrain {
           cy = clamp(cy + rng.int(-45, 45), this.topY(cx) + 50, this.h - 50);
         }
       }
+      // dress the caverns: stalagmites and crystal clusters on cave floors
+      const cavePool = PROP_SETS.cave;
+      if (cavePool.length) {
+        let placed = 0;
+        for (let tries = 0; tries < 60 && placed < 7; tries++) {
+          const px = rng.int(80, this.w - 200);
+          const def = cavePool[rng.int(0, cavePool.length - 1)];
+          // find a cavern floor: air pocket beneath the surface with solid below
+          let y = this.topY(px) + 30;
+          let floor = -1;
+          while (y < this.h - 20) {
+            if (!this.solid(px, y)) {
+              let yy = y;
+              while (yy < this.h - 10 && !this.solid(px, yy)) yy++;
+              if (yy - y > def.h * 0.7 && yy < this.h - 10) { floor = yy; break; }
+              y = yy + 1;
+            } else y++;
+          }
+          if (floor < 0) continue;
+          this.stampProp(def, px - (def.w >> 1), floor);
+          placed++;
+        }
+      }
     } else if (style === 'moonscape') {
       // pockmarked craters with raised brittle rims — moon rock fragments
       // into shards rather than pouring like dust
@@ -137,13 +161,32 @@ export class Terrain {
         this.paintMat(cx + r, this.topY(clamp(cx + r, 0, this.w - 1)) - 4, (r * 0.22) | 0, BRICK);
         this.carve(cx, cy, r);
       }
-      // scattered surface boulders that shatter when hit
-      const boulders = rng.int(7, 12);
+      // scattered boulder props that shatter when hit
+      const rockPool = PROP_SETS.rocks;
+      const boulders = rng.int(5, 9);
       for (let b = 0; b < boulders; b++) {
-        const bx = rng.int(70, this.w - 70);
-        const br = rng.int(10, 30);
-        const by = this.topY(bx) - ((br * 0.45) | 0);
-        this.paintMat(bx, by, br, BRICK);
+        const bx = rng.int(70, this.w - 170);
+        if (rockPool.length) {
+          const def = rockPool[rng.int(0, rockPool.length - 1)];
+          this.stampProp(def, bx, this.topY(bx + (def.w >> 1)) + 4);
+        } else {
+          const br = rng.int(10, 30);
+          this.paintMat(bx, this.topY(bx) - ((br * 0.45) | 0), br, BRICK);
+        }
+      }
+      // abandoned moon base: a couple of installations per map
+      const moonPool = PROP_SETS.moon;
+      if (moonPool.length) {
+        const n = rng.int(1, 3);
+        const used = new Set();
+        for (let i = 0; i < n; i++) {
+          const pi = rng.int(0, moonPool.length - 1);
+          if (used.has(pi)) continue;
+          used.add(pi);
+          const def = moonPool[pi];
+          const bx = rng.int(90, this.w - 90 - def.w);
+          this.stampProp(def, bx, this.topY(bx + (def.w >> 1)) + 2);
+        }
       }
     }
   }
@@ -158,7 +201,9 @@ export class Terrain {
     for (let x = 0; x < this.w; x++) {
       for (let y = gy; y < this.h; y++) this.mask[y * this.w + x] = ROCK;
     }
-    const cityPool = [...PROP_SETS.city, ...PROP_SETS.clean];
+    const cityPool = [...PROP_SETS.city, ...PROP_SETS.clean, ...PROP_SETS.ruins2, ...PROP_SETS.clean2];
+    const streetPool = [...PROP_SETS.street, ...PROP_SETS.street2].filter(d => d.h < 100);
+    const steelPool = PROP_SETS.steel;
     if (cityPool.length) {
       let x = rng.int(40, 120);
       while (x < this.w - 200) {
@@ -168,6 +213,16 @@ export class Terrain {
           x += def.w + rng.int(60, 160);
         } else {
           x += rng.int(140, 280);
+        }
+        // street furniture and steelwork in the gaps between towers
+        if (rng() < 0.4 && streetPool.length && x < this.w - 160) {
+          const sp = streetPool[rng.int(0, streetPool.length - 1)];
+          this.stampProp(sp, x, gy);
+          x += sp.w + rng.int(30, 90);
+        } else if (rng() < 0.12 && steelPool.length && x < this.w - 160) {
+          const sp = steelPool[rng.int(0, steelPool.length - 1)];
+          this.stampProp(sp, x, gy);
+          x += sp.w + rng.int(30, 90);
         }
       }
     } else {
@@ -205,7 +260,7 @@ export class Terrain {
         if (wx < 0 || wx >= this.w) continue;
         // building masonry is brittle: it fractures instead of sandifying
         this.mask[wy * this.w + wx] = m === ROCK ? BRICK : m;
-        if (m === ROCK) this._hasBrick = true;
+        if (m === ROCK || m === BRICK) this._hasBrick = true;
       }
     }
     this.recalcTop(Math.max(0, x - 1), Math.min(this.w - 1, x + dec.w + 1));

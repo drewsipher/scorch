@@ -35,6 +35,72 @@ const SHEETS = [
     ],
   },
   {
+    src: 'ruins2.jpg', out: 'ruined_towers.js', exportName: 'RUINED_TOWERS',
+    mode: 'segment', scale: 0.5, matMode: 'heuristic', tol: 66, groundStrip: true,
+    density: false, splitWide: 200,
+  },
+  {
+    src: 'clean2.jpg', out: 'clean_towers.js', exportName: 'CLEAN_TOWERS',
+    mode: 'regions',
+    regions: [
+      { name: 'office_tower', scale: 0.5, mat: 1, key: 'poly',
+        poly: [[30, 639], [30, 95], [65, 90], [65, 60], [95, 55], [95, 32], [185, 32], [185, 55], [210, 60], [240, 68], [240, 95], [290, 100], [290, 639]] },
+      { name: 'brick_mid', scale: 0.5, mat: 1, key: 'poly',
+        poly: [[318, 639], [318, 258], [330, 245], [430, 240], [430, 205], [510, 205], [510, 240], [560, 245], [590, 258], [590, 639]] },
+      { name: 'glass_spire', scale: 0.5, mat: 1, key: 'poly',
+        poly: [[625, 639], [625, 95], [655, 90], [655, 60], [675, 55], [675, 22], [795, 22], [795, 55], [805, 60], [805, 90], [820, 95], [820, 75], [900, 75], [900, 639]] },
+      { name: 'beige_lowrise', scale: 0.5, mat: 1, key: 'poly',
+        poly: [[930, 639], [930, 435], [940, 420], [975, 415], [975, 368], [1115, 368], [1115, 400], [1185, 405], [1185, 430], [1195, 435], [1195, 639]] },
+      { name: 'glass_slab', scale: 0.5, mat: 1, key: 'poly',
+        poly: [[1250, 639], [1250, 125], [1295, 112], [1295, 70], [1400, 70], [1400, 112], [1420, 118], [1495, 115], [1495, 639]] },
+    ],
+  },
+  {
+    src: 'steel.jpg', out: 'steel_structures.js', exportName: 'STEEL_STRUCTURES',
+    mode: 'segment', scale: 1 / 3, matMode: 'metal', tol: 42, groundStrip: false,
+    density: false, minSeg: 40,
+  },
+  {
+    src: 'rocks.jpg', out: 'rocks.js', exportName: 'ROCKS',
+    mode: 'segment', scale: 1 / 3, matMode: 'brick', tol: 44, groundStrip: false,
+    density: false, minSeg: 40, bands: [[0, 320], [320, 640]],
+  },
+  {
+    src: 'cave.jpg', out: 'cave_features.js', exportName: 'CAVE_FEATURES',
+    mode: 'segment', scale: 0.5, matMode: 'brick', tol: 40, groundStrip: false,
+    density: false, minSeg: 30, bands: [[285, 515]],
+  },
+  {
+    src: 'moon.jpg', out: 'moon_props.js', exportName: 'MOON_PROPS',
+    mode: 'regions',
+    regions: [
+      { name: 'dome', scale: 0.4, mat: 3, key: 'poly',
+        poly: [[60, 462], [75, 390], [100, 340], [130, 310], [170, 285], [230, 272], [290, 282], [330, 305], [360, 335], [385, 375], [400, 420], [405, 462]] },
+      { name: 'radar_dish', scale: 0.4, mat: 3, key: 'poly',
+        poly: [[435, 462], [468, 415], [472, 335], [487, 245], [470, 218], [488, 182], [556, 150], [572, 128], [610, 122], [655, 138], [672, 158], [640, 232], [630, 320], [598, 342], [590, 400], [618, 462]] },
+      { name: 'lander', scale: 0.4, mat: 3, key: 'poly',
+        poly: [[700, 462], [710, 430], [742, 412], [745, 275], [800, 192], [870, 252], [900, 235], [968, 210], [1000, 208], [1005, 155], [1030, 145], [1048, 148], [1042, 205], [1078, 225], [1088, 300], [1090, 462]] },
+      { name: 'flag', scale: 0.4, mat: 3, key: 'poly',
+        poly: [[1158, 462], [1158, 282], [1166, 272], [1178, 280], [1178, 296], [1258, 296], [1258, 360], [1180, 360], [1180, 440], [1235, 448], [1235, 462]] },
+      { name: 'moon_rocks', scale: 0.4, mat: 4, key: 'poly',
+        poly: [[1300, 462], [1310, 440], [1330, 424], [1392, 416], [1432, 428], [1446, 440], [1470, 436], [1492, 450], [1492, 462]] },
+    ],
+  },
+  {
+    src: 'street2.jpg', out: 'street_props2.js', exportName: 'STREET_PROPS2',
+    mode: 'regions',
+    regions: [
+      { name: 'graffiti_shop', scale: 1 / 3, mat: 1, key: 'poly',
+        poly: [[88, 545], [95, 162], [160, 150], [168, 145], [168, 26], [212, 26], [212, 145], [225, 140], [225, 95], [335, 95], [335, 140], [408, 140], [412, 58], [548, 55], [548, 95], [558, 80], [585, 80], [585, 140], [622, 148], [635, 162], [635, 545]] },
+      { name: 'twin_cans', scale: 0.25, mat: 3, key: 'poly',
+        poly: [[512, 545], [512, 445], [520, 430], [595, 428], [600, 415], [680, 415], [688, 440], [688, 545]] },
+      { name: 'graffiti_dumpster', scale: 0.25, mat: 3, key: 'poly',
+        poly: [[698, 545], [698, 340], [712, 318], [725, 310], [905, 308], [920, 320], [932, 340], [932, 545]] },
+      { name: 'beater_car', scale: 0.25, mat: 3, key: 'poly',
+        poly: [[948, 570], [948, 490], [962, 462], [1080, 452], [1105, 400], [1320, 398], [1352, 452], [1452, 462], [1465, 495], [1465, 570]] },
+    ],
+  },
+  {
     src: 'street-props.jpg', out: 'street_props.js', exportName: 'STREET_PROPS',
     mode: 'regions',
     regions: [
@@ -215,29 +281,52 @@ const extractFn = (cfg) => {
       }
       opaque.set(cur);
     }
-    // segment columns
-    const colFill = new Array(W).fill(0);
-    for (let x = 0; x < W; x++) {
-      for (let y = 0; y < cropBottom; y++) if (opaque[y * W + x]) colFill[x]++;
-    }
-    const segs = [];
-    let start = -1;
-    for (let x = 0; x < W; x++) {
-      const filled = colFill[x] > 2;
-      if (filled && start < 0) start = x;
-      if ((!filled || x === W - 1) && start >= 0) {
-        if (x - start > 60) segs.push([start, x]);
-        start = -1;
+    // segment columns, optionally within horizontal bands (multi-row sheets)
+    const bands = cfg.bands || [[0, cropBottom]];
+    const minSeg = cfg.minSeg || 60;
+    for (const [by0, by1raw] of bands) {
+      const by1 = Math.min(by1raw, cropBottom);
+      const colFill = new Array(W).fill(0);
+      for (let x = 0; x < W; x++) {
+        for (let y = by0; y < by1; y++) if (opaque[y * W + x]) colFill[x]++;
       }
-    }
-    for (const [sx0, sx1] of segs) {
-      let y0 = cropBottom, y1 = 0;
-      for (let y = 0; y < cropBottom; y++) {
-        for (let x = sx0; x <= sx1; x++) {
-          if (opaque[y * W + x]) { y0 = Math.min(y0, y); y1 = Math.max(y1, y); break; }
+      const segs = [];
+      let start = -1;
+      for (let x = 0; x < W; x++) {
+        const filled = colFill[x] > 2;
+        if (filled && start < 0) start = x;
+        if ((!filled || x === W - 1) && start >= 0) {
+          if (x - start > minSeg) segs.push([start, x]);
+          start = -1;
         }
       }
-      out.push({ name: `b${out.length}`, ...quantizeSprite(opaque, sx0, y0, sx1, y1, cfg.scale, cropBottom) });
+      // two sprites touching (antennas, rubble): split fat segs at the
+      // weakest column in the middle half, recursively
+      if (cfg.splitWide) {
+        for (let i = 0; i < segs.length; i++) {
+          const [a, b] = segs[i];
+          if (b - a <= cfg.splitWide) continue;
+          let bestX = -1, bestFill = Infinity;
+          for (let x = a + ((b - a) * 0.25 | 0); x <= a + ((b - a) * 0.75 | 0); x++) {
+            if (colFill[x] < bestFill) { bestFill = colFill[x]; bestX = x; }
+          }
+          if (bestX > 0 && bestFill < (by1 - by0) * 0.25) {
+            segs.splice(i, 1, [a, bestX - 1], [bestX + 1, b]);
+            i--; // re-examine both halves
+          }
+        }
+      }
+      for (const [sx0, sx1] of segs) {
+        let y0 = by1, y1 = by0;
+        for (let y = by0; y < by1; y++) {
+          for (let x = sx0; x <= sx1; x++) {
+            if (opaque[y * W + x]) { y0 = Math.min(y0, y); y1 = Math.max(y1, y); break; }
+          }
+        }
+        // wipe pixels outside this band within the seg so quantize sees one row
+        const sp = quantizeSprite(opaque, sx0, y0, sx1, y1, cfg.scale, Math.min(by1, cropBottom));
+        if (sp.w >= 10 && sp.h >= 10) out.push({ name: `b${out.length}`, ...sp });
+      }
     }
   } else {
     // regions mode
@@ -322,6 +411,10 @@ for (const sheet of SHEETS) {
       mats = sp.palette.map(() => sp.mat);
     } else if (sheet.matMode === 'rock') {
       mats = sp.palette.map(() => 1);
+    } else if (sheet.matMode === 'metal') {
+      mats = sp.palette.map(() => 3);
+    } else if (sheet.matMode === 'brick') {
+      mats = sp.palette.map(() => 4);
     } else {
       mats = sp.palette.map(q => {
         const r = ((q >> 8) & 15) * 17, g = ((q >> 4) & 15) * 17, bl = (q & 15) * 17;

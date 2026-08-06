@@ -4,11 +4,25 @@
 import { CITY_BUILDINGS } from './city_buildings.js';
 import { CLEAN_BUILDINGS } from './clean_buildings.js';
 import { STREET_PROPS } from './street_props.js';
+import { RUINED_TOWERS } from './ruined_towers.js';
+import { CLEAN_TOWERS } from './clean_towers.js';
+import { STEEL_STRUCTURES } from './steel_structures.js';
+import { ROCKS } from './rocks.js';
+import { CAVE_FEATURES } from './cave_features.js';
+import { MOON_PROPS } from './moon_props.js';
+import { STREET_PROPS2 } from './street_props2.js';
 
 export const PROP_SETS = {
   city: CITY_BUILDINGS,
   clean: CLEAN_BUILDINGS,
   street: STREET_PROPS,
+  ruins2: RUINED_TOWERS,
+  clean2: CLEAN_TOWERS,
+  steel: STEEL_STRUCTURES,
+  rocks: ROCKS,
+  cave: CAVE_FEATURES,
+  moon: MOON_PROPS,
+  street2: STREET_PROPS2,
 };
 
 export function getProp(ref) {

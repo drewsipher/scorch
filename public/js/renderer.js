@@ -5,6 +5,7 @@
 import { WORLD_W, WORLD_H, TANK_RADIUS, TANK_HIT_DY, MUZZLE_PIVOT_DY, MUZZLE_LEN, WEAPONS } from './config.js';
 import { makeRng, makeNoise1D, clamp, lerp, TAU, DEG, hexToRgb, rgbStr } from './utils.js';
 import { initSprites, ICONS, buildTankSprites, buildCloud, SPR_SCALE } from './sprites.js';
+import { CITY_SKYLINE } from './assets/city_skyline.js';
 
 const PIXEL_FONT = '"Press Start 2P", "Courier New", monospace';
 const WDEF = Object.fromEntries(WEAPONS.map(w => [w.id, w]));
@@ -648,6 +649,22 @@ export class Renderer {
       ctx.restore();
     }
 
+    // ruined skyline silhouette looming behind city blocks
+    if (match.terrain && match.terrain.style === 'city') {
+      ctx.save();
+      ctx.imageSmoothingEnabled = false;
+      const sk = this.skylineCanvas();
+      const f = 0.32;                       // parallax: drifts slower than the action
+      const gy = WORLD_H * 0.74;            // city ground line (see genCity)
+      const dw = WORLD_W * 1.3 * z;
+      const dh = (sk.height * 2) * z;       // module is half-res of a world-scale scene
+      const sx2 = ox * f - WORLD_W * 0.15 * z;
+      const sy2 = (gy + 14 - sk.height * 2) * z + oy;
+      ctx.globalAlpha = 0.85;
+      ctx.drawImage(sk, sx2, sy2, dw, dh);
+      ctx.restore();
+    }
+
     // atmosphere haze between hills and terrain
     const hazeG = ctx.createLinearGradient(0, this.vh * 0.45, 0, this.vh);
     hazeG.addColorStop(0, 'rgba(0,0,0,0)');
@@ -792,6 +809,20 @@ export class Renderer {
     vg.addColorStop(1, 'rgba(0,0,0,0.4)');
     ctx.fillStyle = vg;
     ctx.fillRect(0, 0, this.vw, this.vh);
+  }
+
+  // lazily rasterize the ruined-skyline silhouette (drawn behind city maps)
+  skylineCanvas() {
+    if (this._skyline) return this._skyline;
+    const cv = document.createElement('canvas');
+    cv.width = CITY_SKYLINE.w; cv.height = CITY_SKYLINE.h;
+    const c = cv.getContext('2d');
+    c.fillStyle = '#15121d';
+    for (let x = 0; x < CITY_SKYLINE.w; x++) {
+      for (const [st, ln] of CITY_SKYLINE.cols[x]) c.fillRect(x, st, 1, ln);
+    }
+    this._skyline = cv;
+    return cv;
   }
 
   drawCelestial(ctx, z, px, py) {
