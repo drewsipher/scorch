@@ -61,6 +61,9 @@ export class Renderer {
   setTheme(theme, seed) {
     this.theme = theme;
     this.skyCache = null;
+    this._skyline = null;   // skyline silhouette is tinted per theme
+    const deep = hexToRgb(theme.terrainStrata[theme.terrainStrata.length - 1]);
+    this.bedrock = `rgb(${deep[0] * 0.5 | 0},${deep[1] * 0.5 | 0},${deep[2] * 0.55 | 0})`;
     const rng = makeRng(seed ^ 0xabcd1234);
     // stars
     this.stars = [];
@@ -82,34 +85,39 @@ export class Renderer {
       const noise = makeNoise1D(makeRng(seed ^ (L * 7717 + 99)), 4);
       const baseY = c.height * (0.42 + L * 0.1);
       const amp = (150 - L * 30) / this.hillScale;
+      const crest = (x) => baseY - Math.abs(noise(x * this.hillScale * (0.003 + L * 0.0012))) * amp - noise(x * this.hillScale * 0.014) * 22 / this.hillScale;
       g.fillStyle = theme.hills[L];
       g.beginPath();
       g.moveTo(0, c.height);
-      for (let x = 0; x <= c.width; x += 1) {
-        const wx = x * this.hillScale;
-        g.lineTo(x, baseY - Math.abs(noise(wx * (0.003 + L * 0.0012))) * amp - noise(wx * 0.014) * 22 / this.hillScale);
-      }
+      for (let x = 0; x <= c.width; x += 1) g.lineTo(x, crest(x));
       g.lineTo(c.width, c.height);
       g.closePath();
       g.fill();
-      // top highlight line (pixel crest)
       g.globalCompositeOperation = 'source-atop';
-      g.fillStyle = 'rgba(255,255,255,0.09)';
+      // dithered rim light fading down from the crest (matches the sky dither)
+      const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
+      const [hr, hg, hb] = hexToRgb(theme.hills[L]);
+      g.fillStyle = `rgba(${Math.min(255, hr * 1.5 + 26) | 0},${Math.min(255, hg * 1.5 + 26) | 0},${Math.min(255, hb * 1.5 + 30) | 0},0.8)`;
       for (let x = 0; x < c.width; x++) {
-        const y = baseY - Math.abs(noise(x * this.hillScale * (0.003 + L * 0.0012))) * amp - noise(x * this.hillScale * 0.014) * 22 / this.hillScale;
-        g.fillRect(x, Math.round(y), 1, 2);
+        const y0 = Math.round(crest(x));
+        g.fillRect(x, y0, 1, 2);   // solid crest line
+        for (let k = 2; k <= 7; k++) {
+          const y = y0 + k;
+          const th = (BAYER[(y & 3) * 4 + (x & 3)] + 0.5) / 16;
+          if (1 - (k - 1) / 7 > th) g.fillRect(x, y, 1, 1);
+        }
       }
       this.hillLayers.push(c);
     }
-    // chunky pixel clouds
+    // chunky pixel clouds (integer scales keep the pixel grid honest)
     this.clouds = [];
     const cn = theme.dusty ? 4 : 6;
     for (let i = 0; i < cn; i++) {
       this.clouds.push({
         x: rng() * WORLD_W, y: WORLD_H * (0.06 + rng() * 0.3),
         spr: buildCloud(rng),
-        scale: 3.5 + rng() * 3.5,
-        sp: 4 + rng() * 8, a: 0.35 + rng() * 0.3,
+        scale: 2 + (rng() * 3 | 0),
+        sp: 4 + rng() * 8, a: 0.5 + rng() * 0.25,
       });
     }
     // wind streaks (visible when the wind blows)
@@ -137,15 +145,39 @@ export class Renderer {
     this.particles.length = 0;
   }
 
+  // Quantized sky: the gradient is posterized into bands with ordered Bayer
+  // dithering at each seam — reads as deliberate pixel art, kills banding.
   buildSky() {
     const c = document.createElement('canvas');
-    c.width = 512; c.height = this.vh;
+    const S = 4;   // sky pixel size
+    c.width = Math.max(2, Math.ceil(this.vw / S));
+    c.height = Math.max(2, Math.ceil(this.vh / S));
     const g = c.getContext('2d');
-    const grad = g.createLinearGradient(0, 0, 0, c.height);
-    const cols = this.theme.sky;
-    cols.forEach((col, i) => grad.addColorStop(i / (cols.length - 1), col));
-    g.fillStyle = grad;
-    g.fillRect(0, 0, c.width, c.height);
+    const cols = this.theme.sky.map(hexToRgb);
+    const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
+    const BANDS = 14;
+    const sample = (t) => {
+      const f = clamp(t, 0, 1) * (cols.length - 1);
+      const i = Math.min(f | 0, cols.length - 2), fr = f - i;
+      return [
+        lerp(cols[i][0], cols[i + 1][0], fr),
+        lerp(cols[i][1], cols[i + 1][1], fr),
+        lerp(cols[i][2], cols[i + 1][2], fr),
+      ];
+    };
+    const img = g.createImageData(c.width, c.height);
+    const d = img.data;
+    for (let y = 0; y < c.height; y++) {
+      const q = (y / (c.height - 1)) * BANDS;
+      const band = q | 0, frac = q - band;
+      for (let x = 0; x < c.width; x++) {
+        const th = (BAYER[(y & 3) * 4 + (x & 3)] + 0.5) / 16;
+        const [r, gg, bb] = sample(Math.min(band + (frac > th ? 1 : 0), BANDS) / BANDS);
+        const i = (y * c.width + x) * 4;
+        d[i] = r; d[i + 1] = gg; d[i + 2] = bb; d[i + 3] = 255;
+      }
+    }
+    g.putImageData(img, 0, 0);
     this.skyCache = c;
   }
 
@@ -617,8 +649,12 @@ export class Renderer {
 
     // sky
     if (!this.skyCache && this.theme) this.buildSky();
-    if (this.skyCache) ctx.drawImage(this.skyCache, 0, 0, this.vw, this.vh);
-    else { ctx.fillStyle = '#05060f'; ctx.fillRect(0, 0, this.vw, this.vh); }
+    if (this.skyCache) {
+      ctx.save();
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(this.skyCache, 0, 0, this.vw, this.vh);
+      ctx.restore();
+    } else { ctx.fillStyle = '#05060f'; ctx.fillRect(0, 0, this.vw, this.vh); }
 
     if (!match || !this.theme) return;
 
@@ -713,44 +749,29 @@ export class Renderer {
 
     match.terrain.flushDirty();
 
-    // terrain drop shadow (pseudo-3D lift off the background)
+    // terrain: backwall in excavations, hard pixel drop shadow, then the land.
+    // (The old neon surface stroke and blur shadow are gone — the crust
+    // highlight is baked into the terrain texture now.)
     if (match.terrain.canvas) {
       ctx.save();
-      ctx.globalAlpha = 0.35;
-      ctx.filter = 'blur(6px)';
-      ctx.drawImage(match.terrain.canvas, ox + 10 * z, oy + 12 * z, WORLD_W * z, WORLD_H * z);
+      ctx.imageSmoothingEnabled = z < 1;   // crisp at >=1x, smooth when minified
+      if (match.terrain.backdrop) {
+        ctx.drawImage(match.terrain.backdrop, ox, oy, WORLD_W * z, WORLD_H * z);
+      }
+      ctx.globalAlpha = 0.3;
+      ctx.filter = 'brightness(0)';
+      ctx.drawImage(match.terrain.canvas, ox + 6 * z, oy + 8 * z, WORLD_W * z, WORLD_H * z);
       ctx.filter = 'none';
       ctx.globalAlpha = 1;
-      ctx.restore();
       ctx.drawImage(match.terrain.canvas, ox, oy, WORLD_W * z, WORLD_H * z);
+      ctx.restore();
+    }
 
-      // neon glow along the terrain surface — each theme's signature color
-      if (this.theme.glow) {
-        const tt = match.terrain.top;
-        const [gr, gg, gb] = hexToRgb(this.theme.glow);
-        ctx.save();
-        ctx.globalCompositeOperation = 'lighter';
-        ctx.beginPath();
-        let started = false;
-        let prevY = 0;
-        for (let x = 0; x < WORLD_W; x += 4) {
-          const y = tt[x];
-          if (y >= WORLD_H) { started = false; continue; }
-          // break at cliffs/floating islands so the glow doesn't draw vertical seams
-          if (started && Math.abs(y - prevY) > 48) started = false;
-          prevY = y;
-          const px2 = x * z + ox, py2 = y * z + oy;
-          if (!started) { ctx.moveTo(px2, py2); started = true; }
-          else ctx.lineTo(px2, py2);
-        }
-        ctx.strokeStyle = rgbStr(gr, gg, gb, 0.08);
-        ctx.lineWidth = 7 * z;
-        ctx.stroke();
-        ctx.strokeStyle = rgbStr(gr, gg, gb, 0.18);
-        ctx.lineWidth = 2.2 * z;
-        ctx.stroke();
-        ctx.restore();
-      }
+    // below the world floor: solid bedrock, not leaked sky-horizon color
+    const worldBot = oy + WORLD_H * z;
+    if (worldBot < this.vh && this.bedrock) {
+      ctx.fillStyle = this.bedrock;
+      ctx.fillRect(0, worldBot, this.vw, this.vh - worldBot);
     }
 
     // tanks (dying tanks stay visible through their death throes)
@@ -811,13 +832,15 @@ export class Renderer {
     ctx.fillRect(0, 0, this.vw, this.vh);
   }
 
-  // lazily rasterize the ruined-skyline silhouette (drawn behind city maps)
+  // lazily rasterize the ruined-skyline silhouette (drawn behind city maps),
+  // tinted with the theme's nearest hill color so it sits in the palette
   skylineCanvas() {
     if (this._skyline) return this._skyline;
     const cv = document.createElement('canvas');
     cv.width = CITY_SKYLINE.w; cv.height = CITY_SKYLINE.h;
     const c = cv.getContext('2d');
-    c.fillStyle = '#15121d';
+    const [hr, hg, hb] = hexToRgb((this.theme && this.theme.hills[2]) || '#15121d');
+    c.fillStyle = `rgb(${hr * 0.8 | 0},${hg * 0.8 | 0},${hb * 0.85 | 0})`;
     for (let x = 0; x < CITY_SKYLINE.w; x++) {
       for (const [st, ln] of CITY_SKYLINE.cols[x]) c.fillRect(x, st, 1, ln);
     }
@@ -837,19 +860,59 @@ export class Renderer {
     }
     const R = this.vh * 0.09;
     const [r, g, b] = hexToRgb(th.sunColor);
-    const glow = ctx.createRadialGradient(sx, sy, 0, sx, sy, R * 4);
-    glow.addColorStop(0, rgbStr(r, g, b, 0.55));
-    glow.addColorStop(0.4, rgbStr(r, g, b, 0.14));
-    glow.addColorStop(1, rgbStr(r, g, b, 0));
-    ctx.fillStyle = glow;
-    ctx.fillRect(sx - R * 4, sy - R * 4, R * 8, R * 8);
-    // chunky pixel disc
     const q = Math.max(3, Math.round(R / 10));
-    ctx.fillStyle = th.sunColor;
-    for (let yy = -R; yy <= R; yy += q) {
-      const hw = Math.floor(Math.sqrt(Math.max(0, R * R - yy * yy)) / q) * q;
-      ctx.fillRect(Math.round(sx - hw), Math.round(sy + yy), hw * 2, q);
+    // chunky quantized disc helper (row spans snapped to the pixel grid)
+    const disc = (cx, cy, rad, fill) => {
+      ctx.fillStyle = fill;
+      for (let yy = -rad; yy <= rad; yy += q) {
+        const hw = Math.floor(Math.sqrt(Math.max(0, rad * rad - yy * yy)) / q) * q;
+        if (hw > 0) ctx.fillRect(Math.round(cx - hw), Math.round(cy + yy), hw * 2, q);
+      }
+    };
+    if (th.moon) {
+      // crescent: lit ring of the disc minus an offset shadow circle — the
+      // shadowed part is simply sky, no halo behind it
+      const mR = R * 0.92, mx = sx + R * 0.38, my = sy - R * 0.12;
+      // tight stepped glow hugging the lit limb (left side)
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      disc(sx - R * 0.3, sy, R * 1.55, rgbStr(r, g, b, 0.03));
+      disc(sx - R * 0.25, sy, R * 1.3, rgbStr(r, g, b, 0.05));
+      disc(sx - R * 0.2, sy, R * 1.1, rgbStr(r, g, b, 0.07));
+      ctx.restore();
+      ctx.fillStyle = th.sunColor;
+      for (let yy = -R; yy <= R; yy += q) {
+        const hw = Math.floor(Math.sqrt(Math.max(0, R * R - yy * yy)) / q) * q;
+        if (hw <= 0) continue;
+        const rowY = sy + yy;
+        // shadow circle's span on this row
+        const dy = rowY - my;
+        const sh2 = mR * mR - dy * dy;
+        let x0 = sx - hw, x1 = sx + hw;
+        if (sh2 > 0) {
+          const shw = Math.ceil(Math.sqrt(sh2) / q) * q;
+          const s0 = mx - shw, s1 = mx + shw;
+          // lit segment left of the shadow
+          if (s0 > x0) ctx.fillRect(Math.round(x0), Math.round(rowY), Math.round(Math.min(s0, x1) - x0), q);
+          // lit segment right of the shadow
+          if (s1 < x1) ctx.fillRect(Math.round(Math.max(s1, x0)), Math.round(rowY), Math.round(x1 - Math.max(s1, x0)), q);
+        } else {
+          ctx.fillRect(Math.round(x0), Math.round(rowY), hw * 2, q);
+        }
+      }
+      return;
     }
+    // sun: quantized radial glow — many close steps so it reads as a dithered
+    // gradient, not a bullseye
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    disc(sx, sy, R * 2.75, rgbStr(r, g, b, 0.03));
+    disc(sx, sy, R * 2.3, rgbStr(r, g, b, 0.04));
+    disc(sx, sy, R * 1.9, rgbStr(r, g, b, 0.05));
+    disc(sx, sy, R * 1.55, rgbStr(r, g, b, 0.07));
+    disc(sx, sy, R * 1.25, rgbStr(r, g, b, 0.1));
+    ctx.restore();
+    disc(sx, sy, R, th.sunColor);
     if (th.gridSun) {
       // synthwave slat lines across the lower half of the sun
       ctx.save();
@@ -862,15 +925,6 @@ export class Renderer {
         ctx.fillRect(sx - R, ly, R * 2, R * (0.03 + i * 0.012));
       }
       ctx.restore();
-    }
-    if (th.moon) {
-      // crescent shadow (chunky)
-      ctx.fillStyle = this.theme.sky[1];
-      const mR = R * 0.92, mx = sx + R * 0.35, my = sy - R * 0.1;
-      for (let yy = -mR; yy <= mR; yy += q) {
-        const hw = Math.floor(Math.sqrt(Math.max(0, mR * mR - yy * yy)) / q) * q;
-        ctx.fillRect(Math.round(mx - hw), Math.round(my + yy), hw * 2, q);
-      }
     }
   }
 

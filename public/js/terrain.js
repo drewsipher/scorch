@@ -27,6 +27,14 @@ export class Terrain {
     this.props = [];                             // stamped art props [{def,x,y}] for texture painting
     this.sandColor = null;                       // per-grain 0xRRGGBB carried by moving sand (render-only)
     this._hasBrick = false;                      // sticky: any BRICK ever written (fracture fast-path)
+    this.baseSolid = null;                       // mask snapshot at generation: where the backwall lives
+    this.backdrop = null;                        // darkened rock backwall canvas (browser only)
+  }
+
+  // Snapshot the pristine ground so later excavation (craters, tunnels) reveals
+  // a dark rock backwall instead of open sky.
+  captureBase() {
+    this.baseSolid = this.mask.slice();
   }
 
   ensureSandColor() {
@@ -112,6 +120,7 @@ export class Terrain {
       for (let y = topY; y < this.h; y++) this.mask[y * this.w + x] = ROCK;
     }
     this.recalcTop(0, this.w - 1);
+    this.captureBase();   // pre-cave, pre-crater: excavation exposes backwall
 
     if (style === 'caves') {
       // organic cavern systems: random-walk chains of carved blobs
@@ -198,9 +207,11 @@ export class Terrain {
     this.mask.fill(0);
     this.props = [];
     const gy = (this.h * 0.74) | 0;
+    this.cityGy = gy;
     for (let x = 0; x < this.w; x++) {
       for (let y = gy; y < this.h; y++) this.mask[y * this.w + x] = ROCK;
     }
+    this.captureBase();   // backwall under street level only; ruins above show sky
     const cityPool = [...PROP_SETS.city, ...PROP_SETS.clean, ...PROP_SETS.ruins2, ...PROP_SETS.clean2];
     const streetPool = [...PROP_SETS.street, ...PROP_SETS.street2].filter(d => d.h < 100);
     const steelPool = PROP_SETS.steel;
@@ -403,6 +414,7 @@ export class Terrain {
     this.recalcTop(0, this.w - 1);
     this.markDirty(0, 0, this.w - 1);
     this.active = [];
+    this.captureBase();
   }
 
   // Buried blast: convert the rock overburden above the chamber into sand so
@@ -796,8 +808,31 @@ export class Terrain {
     this.ctx = this.canvas.getContext('2d');
     this.buildTexture(theme, seed);
     this.paintProps();
+    this.buildBackdrop();
     this.redrawColumns(0, this.w - 1);
     this.dirtyRects = [];
+  }
+
+  // Dark rock backwall: the pristine ground silhouette, darkened. Craters and
+  // tunnels carved out of the terrain reveal this instead of open sky, giving
+  // every excavation interior depth (Worms/Metal Slug style).
+  buildBackdrop() {
+    if (!this.baseSolid || !this.texture) { this.backdrop = null; return; }
+    const cv = document.createElement('canvas');
+    cv.width = this.w; cv.height = this.h;
+    const bctx = cv.getContext('2d');
+    const img = bctx.createImageData(this.w, this.h);
+    const bd = img.data, td = this.texture.data;
+    for (let i = 0; i < this.baseSolid.length; i++) {
+      if (!this.baseSolid[i]) continue;
+      const t = i * 4;
+      bd[t] = td[t] * 0.48;
+      bd[t + 1] = td[t + 1] * 0.5;
+      bd[t + 2] = td[t + 2] * 0.58 + 10;
+      bd[t + 3] = 255;
+    }
+    bctx.putImageData(img, 0, 0);
+    this.backdrop = cv;
   }
 
   // bake stamped prop art (building facades) into the strata texture
@@ -806,22 +841,62 @@ export class Terrain {
     for (const prop of this.props) this.paintOneProp(prop);
   }
 
+  // Bake a prop into the strata texture, restyled to match the generated
+  // sprites: posterized luminance (photo gradients -> pixel ramps), a pull
+  // toward the theme palette, top-left rim light, bottom-right shade, and a
+  // dark inline outline around the silhouette.
   paintOneProp(prop) {
     if (!this.texture) return;
     const td = this.texture.data;
     const dec = decodeProp(prop.def);
-    for (let py = 0; py < dec.h; py++) {
+    const { w: pw, h: ph, mats } = dec;
+    const tint = this.propTint || [128, 128, 128];
+    const K = 0.28;
+    const solidAt = (px, py) => px >= 0 && py >= 0 && px < pw && py < ph && mats[py * pw + px] !== 0;
+    // silhouette edge map (for outline + relief lighting)
+    const edge = new Uint8Array(pw * ph);
+    for (let py = 0; py < ph; py++) {
+      for (let px = 0; px < pw; px++) {
+        if (!mats[py * pw + px]) continue;
+        if (!solidAt(px, py - 1) || !solidAt(px, py + 1) || !solidAt(px - 1, py) || !solidAt(px + 1, py)) {
+          edge[py * pw + px] = 1;
+        }
+      }
+    }
+    const edgeAt = (px, py) => px >= 0 && py >= 0 && px < pw && py < ph && edge[py * pw + px] === 1;
+    for (let py = 0; py < ph; py++) {
       const wy = prop.y + py;
       if (wy < 0 || wy >= this.h) continue;
-      for (let px = 0; px < dec.w; px++) {
-        if (!dec.mats[py * dec.w + px]) continue;
+      for (let px = 0; px < pw; px++) {
+        if (!mats[py * pw + px]) continue;
         const wx = prop.x + px;
         if (wx < 0 || wx >= this.w) continue;
-        const c = dec.colors[py * dec.w + px];
         const ti = (wy * this.w + wx) * 4;
-        td[ti] = (c >> 16) & 255;
-        td[ti + 1] = (c >> 8) & 255;
-        td[ti + 2] = c & 255;
+        if (edge[py * pw + px]) {
+          td[ti] = 16; td[ti + 1] = 18; td[ti + 2] = 28;
+          continue;
+        }
+        const c = dec.colors[py * pw + px];
+        let r = (c >> 16) & 255, g = (c >> 8) & 255, b = c & 255;
+        // posterize luminance to 6 steps
+        const L = 0.299 * r + 0.587 * g + 0.114 * b;
+        const Lq = Math.round(L / 42.5) * 42.5;
+        const f = (Lq + 14) / (L + 14);
+        r *= f; g *= f; b *= f;
+        // pull toward the theme palette so the prop sits in the scene
+        const ln = Lq / 255;
+        r = r * (1 - K) + tint[0] * ln * K * 1.6;
+        g = g * (1 - K) + tint[1] * ln * K * 1.6;
+        b = b * (1 - K) + tint[2] * ln * K * 1.6;
+        // relief: lit where the outline is above/left, shaded below/right
+        if (edgeAt(px, py - 1) || edgeAt(px - 1, py)) {
+          r = r * 1.22 + 16; g = g * 1.22 + 16; b = b * 1.22 + 16;
+        } else if (edgeAt(px, py + 1) || edgeAt(px + 1, py)) {
+          r *= 0.76; g *= 0.76; b *= 0.76;
+        }
+        td[ti] = clamp(r, 0, 255) | 0;
+        td[ti + 1] = clamp(g, 0, 255) | 0;
+        td[ti + 2] = clamp(b, 0, 255) | 0;
       }
     }
   }
@@ -837,14 +912,20 @@ export class Terrain {
     const n = strata.length;
     // per-column brightness variation (vertical streaks like a cliff face)
     const colShade = new Float32Array(this.w);
-    for (let x = 0; x < this.w; x++) colShade[x] = colNoise(x * 0.02) * 9 + colNoise(x * 0.12) * 5;
+    for (let x = 0; x < this.w; x++) colShade[x] = colNoise(x * 0.02) * 7 + colNoise(x * 0.12) * 4;
     const s = seed | 0;
-    // Metal Slug look: color chosen per CHUNK block (chunky pixels), ordered
-    // Bayer dither at strata boundaries, two-tone mottle inside each stratum.
-    const CH = 3;
+    // Layered-rock look, 2px blocks: ordered Bayer dither at strata boundaries,
+    // wavy sediment seams that follow the depth contours, chunky two-tone
+    // mottle, and sparse embedded pebbles — structure instead of noise.
+    const CH = 2;
     const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
     const bw = Math.ceil(this.w / CH), bh = Math.ceil(this.h / CH);
     const blockCol = new Array(bw * bh);
+    const hash2 = (a, b) => {
+      let hh = (Math.imul(a + 1, 2246822519) ^ Math.imul(b + 1, 3266489917) ^ s);
+      hh = Math.imul(hh ^ (hh >>> 15), 2654435761);
+      return (hh >>> 9) / 8388608;
+    };
     for (let by = 0; by < bh; by++) {
       for (let bx = 0; bx < bw; bx++) {
         const x = bx * CH, y = by * CH;
@@ -855,15 +936,26 @@ export class Terrain {
         const frac = fi - band;
         // ordered dither between bands
         const th = (BAYER[(by & 3) * 4 + (bx & 3)] + 0.5) / 16;
-        if (frac > 1 - 0.35 && (frac - (1 - 0.35)) / 0.35 > th && band < n - 1) band++;
+        if (frac > 0.7 && (frac - 0.7) / 0.3 > th && band < n - 1) band++;
         let [r, g, b] = strata[band];
-        // two-tone mottle inside the stratum (block hash)
-        let h2 = (bx * 2246822519 + by * 3266489917) ^ (s * 668265263);
-        h2 = Math.imul(h2 ^ (h2 >>> 15), 2654435761);
-        const m = ((h2 >>> 9) & 0xff) / 255;
-        const tone = m < 0.22 ? 0.88 : m > 0.84 ? 1.1 : 1;
-        const fall = 1 - depth * 0.22;
-        const cs = colShade[x] * 0.25;
+        let tone = 1;
+        // thin sediment seams undulating with the strata (4 per band)
+        const seam = (fi * 4) % 1;
+        if (seam < 0.16 && depth > 0.03) tone *= 0.84;
+        // chunky 4px two-tone mottle
+        const m = hash2(bx >> 1, by >> 1);
+        if (m < 0.15) tone *= 0.90; else if (m > 0.90) tone *= 1.09;
+        // sparse pebbles: lighter stones with a dark under-edge
+        const ph = hash2((bx >> 2) * 5 + 13, (by >> 2) * 7 + 101);
+        if (ph < 0.14 && depth > 0.06) {
+          const cxq = ((bx >> 2) << 2) + 1 + (((ph * 97) | 0) & 1);
+          const cyq = ((by >> 2) << 2) + 1 + (((ph * 977) | 0) & 1);
+          const ddx = bx - cxq, ddy = by - cyq;
+          const dd = ddx * ddx + ddy * ddy;
+          if (dd <= 2) tone = ddy > 0 ? 0.72 : 1.2;
+        }
+        const fall = 1 - depth * 0.3;
+        const cs = colShade[x] * 0.3;
         r = clamp(r * tone * fall + cs, 0, 255);
         g = clamp(g * tone * fall + cs, 0, 255);
         b = clamp(b * tone * fall + cs, 0, 255);
@@ -880,6 +972,7 @@ export class Terrain {
     }
     this.texture = tex;
     this.surfaceRGB = topCol;
+    this.propTint = topCol;
     this.glow = theme.glow;
   }
 
@@ -900,16 +993,19 @@ export class Terrain {
           const ti = (rowM + gx) * 4;
           if (v === SAND) {
             const cc = this.sandColor ? this.sandColor[rowM + gx] : 0;
+            // granular speckle so loose material reads as soil, not smooth fill
+            let hh = (gx * 73856093) ^ (y * 19349663);
+            hh = Math.imul(hh ^ (hh >>> 13), 2654435761);
+            const sp = ((hh >>> 8) & 31) - 15;
             if (cc) {
               // crumbled material keeps its source color (building debris!)
-              rd[ri] = (cc >> 16) & 255;
-              rd[ri + 1] = (cc >> 8) & 255;
-              rd[ri + 2] = cc & 255;
+              rd[ri] = clamp(((cc >> 16) & 255) + sp, 0, 255);
+              rd[ri + 1] = clamp(((cc >> 8) & 255) + sp, 0, 255);
+              rd[ri + 2] = clamp((cc & 255) + (sp * 0.7 | 0), 0, 255);
             } else {
-              // loose sand reads just barely lighter than bedrock
-              rd[ri] = Math.min(255, td[ti] * 1.05 + 5);
-              rd[ri + 1] = Math.min(255, td[ti + 1] * 1.04 + 4);
-              rd[ri + 2] = Math.min(255, td[ti + 2] + 2);
+              rd[ri] = clamp(td[ti] * 1.06 + 6 + sp, 0, 255);
+              rd[ri + 1] = clamp(td[ti + 1] * 1.05 + 5 + sp, 0, 255);
+              rd[ri + 2] = clamp(td[ti + 2] + 3 + (sp * 0.7 | 0), 0, 255);
             }
           } else if (v === METAL) {
             // desaturated steel with faint horizontal plating bands
@@ -927,11 +1023,16 @@ export class Terrain {
         }
       }
     }
-    // Metal Slug crust on every surface run: 2px dark outline, then a bright
-    // top band in the theme's surface color, then a transition row.
+    // Metal Slug crust on every surface run: chunky dark outline, a bright
+    // glow-tinted highlight edge, the theme's surface band, then a blend row.
     const [sr, sg, sb] = this.surfaceRGB;
+    const glowRGB = this.glow ? hexToRgb(this.glow) : [255, 255, 255];
     const bandR = clamp(sr * 1.3 + 30, 0, 255), bandG = clamp(sg * 1.3 + 30, 0, 255), bandB = clamp(sb * 1.3 + 30, 0, 255);
-    const hiR = clamp(sr * 0.6 + 150, 0, 255), hiG = clamp(sg * 0.6 + 150, 0, 255), hiB = clamp(sb * 0.6 + 150, 0, 255);
+    // highlight leans toward the theme's glow color: crisp lit rim, no bloom
+    const hiR = clamp((sr * 0.6 + 150) * 0.6 + glowRGB[0] * 0.4, 0, 255);
+    const hiG = clamp((sg * 0.6 + 150) * 0.6 + glowRGB[1] * 0.4, 0, 255);
+    const hiB = clamp((sb * 0.6 + 150) * 0.6 + glowRGB[2] * 0.4, 0, 255);
+    const isCity = this.style === 'city';
     for (let x = 0; x < wSpan; x++) {
       const gx = x0 + x;
       let inAir = true;
@@ -946,15 +1047,38 @@ export class Terrain {
             continue;
           }
           const runMetal = mv === METAL || mv === BRICK;
-          for (let k = 0; k < 8 && y + k < this.h; k++) {
+          // intact city streets get sidewalk + asphalt with lane dashes
+          if (isCity && !runMetal && y === this.top[gx] && Math.abs(y - this.cityGy) <= 2) {
+            for (let k = 0; k < 12 && y + k < this.h; k++) {
+              if (this.mask[(y + k) * this.w + gx] === AIR) break;
+              const ri = ((y + k) * wSpan + x) * 4;
+              let hh = (gx * 73856093) ^ ((y + k) * 19349663);
+              hh = Math.imul(hh ^ (hh >>> 13), 2654435761);
+              const sp2 = ((hh >>> 8) & 7) - 3;
+              if (k < 1) {          // curb highlight
+                rd[ri] = 182; rd[ri + 1] = 186; rd[ri + 2] = 198;
+              } else if (k < 2) {   // curb shadow
+                rd[ri] = 108; rd[ri + 1] = 112; rd[ri + 2] = 126;
+              } else if (k >= 5 && k < 7 && ((gx >> 5) & 1) === 0) {
+                rd[ri] = 214; rd[ri + 1] = 194; rd[ri + 2] = 110;  // lane dash
+              } else if (k < 10) {  // asphalt
+                rd[ri] = 40 + sp2; rd[ri + 1] = 42 + sp2; rd[ri + 2] = 52 + sp2;
+              } else {              // blend into ground
+                rd[ri] = (rd[ri] + 40) >> 1; rd[ri + 1] = (rd[ri + 1] + 42) >> 1; rd[ri + 2] = (rd[ri + 2] + 52) >> 1;
+              }
+            }
+            inAir = false;
+            continue;
+          }
+          for (let k = 0; k < 10 && y + k < this.h; k++) {
             if (this.mask[(y + k) * this.w + gx] === AIR) break;
             if (runMetal && k >= 2) break;   // steel: dark edge only, no soil crust
             const ri = ((y + k) * wSpan + x) * 4;
             if (k < 2) {           // outline
               rd[ri] = 16; rd[ri + 1] = 18; rd[ri + 2] = 28;
-            } else if (k === 2) {  // highlight edge of the crust
+            } else if (k < 4) {    // highlight edge of the crust
               rd[ri] = hiR; rd[ri + 1] = hiG; rd[ri + 2] = hiB;
-            } else if (k < 6) {    // crust band
+            } else if (k < 8) {    // crust band
               rd[ri] = bandR; rd[ri + 1] = bandG; rd[ri + 2] = bandB;
             } else {               // transition into dirt
               rd[ri] = (rd[ri] + sr) >> 1; rd[ri + 1] = (rd[ri + 1] + sg) >> 1; rd[ri + 2] = (rd[ri + 2] + sb) >> 1;

@@ -356,20 +356,22 @@ export function buildIcon(id) {
   return toCanvas(finish(g));
 }
 
-// ---------- clouds (chunky two-tone puffs) ----------
+// ---------- clouds (chunky three-tone puffs, flat shaded base) ----------
 export function buildCloud(seedRng) {
-  const w = 26 + (seedRng() * 14 | 0), h = 10 + (seedRng() * 4 | 0);
+  const w = 34 + (seedRng() * 26 | 0), h = 14 + (seedRng() * 6 | 0);
   const g = grid(w, h);
-  const n = 4 + (seedRng() * 3 | 0);
+  const n = 5 + (seedRng() * 4 | 0);
   for (let i = 0; i < n; i++) {
-    const cx = 4 + seedRng() * (w - 8);
-    const cy = h - 4 - seedRng() * 3;
-    const r = 2.5 + seedRng() * 3;
-    disc(g, cx, cy, r, '#f2f4f8');
+    const cx = 5 + seedRng() * (w - 10);
+    const cy = h - 5 - seedRng() * (h * 0.3);
+    const r = 3 + seedRng() * (h * 0.32);
+    disc(g, cx, cy, r, '#e6ecf6');
   }
-  // flat bottom
-  for (let x = 0; x < w; x++) for (let y = h - 2; y < h; y++) {
-    if (get(g, x, y)) px(g, x, y, '#c9d2e4');
+  // 3-tone shading: lit crowns on top, shaded flat base
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    if (!get(g, x, y)) continue;
+    if (!get(g, x, y - 1)) px(g, x, y, '#ffffff');
+    else if (y >= h - 3 || !get(g, x, y + 1)) px(g, x, y, '#b9c6da');
   }
   return toCanvas(finish(g, { shade: false }));
 }
